@@ -51,7 +51,11 @@ export interface LADContextType {
   ) => Promise<void>;
   updateSpaceSettings: (spaceId: string, settings: Partial<LADSpaceSettings>) => Promise<void>;
   renameSpace: (spaceId: string, newName: string, description?: string) => Promise<void>;
-  inviteMember: (email: string, role?: 'owner' | 'editor' | 'viewer', name?: string) => Promise<void>;
+  inviteMember: (
+    email: string,
+    role?: 'owner' | 'editor' | 'viewer',
+    name?: string
+  ) => Promise<{ success: boolean; gmailSent: boolean; driveShared: boolean; warning?: string }>;
   
   // Space Joining & Invitations
   pendingJoinSpaceId: string | null;
@@ -133,7 +137,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await storageManager.initialize();
 
       const auth = authService.getState();
-      if (auth.isAuthenticated && auth.user?.accessToken && auth.user?.provider === 'google') {
+      const isExpired = authService.isTokenExpired();
+      if (auth.isAuthenticated && auth.user?.accessToken && !isExpired && auth.user?.provider === 'google') {
         storageManager.setGDriveProvider({
           clientId: DEFAULT_GDRIVE_CLIENT_ID,
           accessToken: auth.user.accessToken,
@@ -367,8 +372,14 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const inviteMember = useCallback(
-    async (email: string, role: 'owner' | 'editor' | 'viewer' = 'editor', name?: string) => {
-      if (!spaceManager || !activeSpace || !userRegistry) return;
+    async (
+      email: string,
+      role: 'owner' | 'editor' | 'viewer' = 'editor',
+      name?: string
+    ): Promise<{ success: boolean; gmailSent: boolean; driveShared: boolean; warning?: string }> => {
+      if (!spaceManager || !activeSpace || !userRegistry) {
+        return { success: false, gmailSent: false, driveShared: false, warning: 'Space not initialized' };
+      }
 
       // 1. Create invitation record in graph and operation log
       await spaceManager.createInvitation(
@@ -379,47 +390,73 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         name
       );
 
+      let driveShared = false;
+      let gmailSent = false;
+      let warning: string | undefined;
+
       // 2. Dispatch Drive permissions & Gmail notification if Google Auth is active
       const auth = authService.getState();
       const accessToken = auth.user?.accessToken;
-      if (auth.isAuthenticated && accessToken && auth.user?.provider === 'google') {
+      const isExpired = authService.isTokenExpired();
+
+      if (auth.isAuthenticated && accessToken && !isExpired && auth.user?.provider === 'google') {
         const remoteProvider = storageManager.getRemoteProvider();
         let folderId: string | undefined;
 
         if (remoteProvider && 'resolveFolderPath' in remoteProvider) {
           try {
             folderId = await (remoteProvider as any).resolveFolderPath(`LAD/${activeSpace.manifest.space_id}`);
-          } catch (e) {
+          } catch (e: any) {
             console.warn('Could not resolve GDrive folder ID for space:', e);
           }
         }
 
         if (folderId) {
-          await shareSpaceDriveFolder(
-            accessToken,
-            folderId,
-            email,
-            role === 'viewer' ? 'viewer' : 'editor'
-          );
+          try {
+            const shareRes = await shareSpaceDriveFolder(
+              accessToken,
+              folderId,
+              email,
+              role === 'viewer' ? 'viewer' : 'editor'
+            );
+            if (shareRes.success) driveShared = true;
+          } catch (e: any) {
+            console.warn('Drive folder sharing failed:', e);
+          }
         }
 
         const joinUrl = getShareableJoinUrl(activeSpace.manifest.space_id);
         const inviterName = userRegistry.identities[0]?.display_name || auth.user.name || 'LAD Board User';
         const inviterEmail = userRegistry.identities[0]?.email || auth.user.email || '';
 
-        await sendGmailInvitation(accessToken, {
-          toEmail: email,
-          invitedName: name,
-          spaceName: activeSpace.manifest.space_name,
-          spaceId: activeSpace.manifest.space_id,
-          inviterName,
-          inviterEmail,
-          role: role === 'viewer' ? 'viewer' : 'editor',
-          joinUrl,
-        });
+        try {
+          const emailRes = await sendGmailInvitation(accessToken, {
+            toEmail: email,
+            invitedName: name,
+            spaceName: activeSpace.manifest.space_name,
+            spaceId: activeSpace.manifest.space_id,
+            inviterName,
+            inviterEmail,
+            role: role === 'viewer' ? 'viewer' : 'editor',
+            joinUrl,
+          });
+
+          if (emailRes.success) {
+            gmailSent = true;
+          } else {
+            warning = emailRes.error;
+            console.warn('Gmail invitation dispatch failed:', emailRes.error);
+          }
+        } catch (e: any) {
+          warning = e.message;
+          console.warn('Gmail API call failed:', e);
+        }
+      } else if (auth.user?.provider === 'google' && isExpired) {
+        warning = 'Google session expired. Please reconnect in Settings to dispatch invitation emails via Gmail.';
       }
 
       refreshSpaceState();
+      return { success: true, gmailSent, driveShared, warning };
     },
     [spaceManager, activeSpace, userRegistry, authService, storageManager, refreshSpaceState]
   );

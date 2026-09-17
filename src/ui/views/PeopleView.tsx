@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
-import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw } from 'lucide-react';
+import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const PeopleView: React.FC = () => {
@@ -18,16 +18,22 @@ export const PeopleView: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<'owner' | 'editor' | 'viewer'>('editor');
   const [reinvitingId, setReinvitingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [warningMsg, setWarningMsg] = useState('');
 
   const userNodes = nodes.filter((n) => n.type === 'user');
 
   const handleSendInvite = async () => {
     if (!inviteEmail.trim()) return;
-    await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
+    const res = await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
     setInviteName('');
     setInviteEmail('');
-    setSuccessMsg(t('peopleView.invitationSent'));
-    setTimeout(() => setSuccessMsg(''), 3000);
+    if (res.gmailSent) {
+      setSuccessMsg(t('peopleView.invitationSent'));
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } else {
+      setWarningMsg(res.warning || t('peopleView.invitationCreatedNoEmail'));
+      setTimeout(() => setWarningMsg(''), 7000);
+    }
   };
 
   const handleReinvite = async (
@@ -39,9 +45,14 @@ export const PeopleView: React.FC = () => {
     if (!email || !email.trim()) return;
     if (nodeId) setReinvitingId(nodeId);
     try {
-      await inviteMember(email.trim(), role, name?.trim() || undefined);
-      setSuccessMsg(t('peopleView.reinviteSuccess', { email: email.trim() }));
-      setTimeout(() => setSuccessMsg(''), 3500);
+      const res = await inviteMember(email.trim(), role, name?.trim() || undefined);
+      if (res.gmailSent) {
+        setSuccessMsg(t('peopleView.reinviteSuccess', { email: email.trim() }));
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setWarningMsg(res.warning || t('peopleView.invitationCreatedNoEmail'));
+        setTimeout(() => setWarningMsg(''), 7000);
+      }
     } catch (err) {
       console.error('Failed to reinvite member:', err);
     } finally {
@@ -75,8 +86,19 @@ export const PeopleView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs flex items-center gap-2 border border-emerald-200 dark:border-emerald-800 font-medium"
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-4 h-4 shrink-0" />
             <span>{successMsg}</span>
+          </motion.div>
+        )}
+
+        {warningMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 rounded-xl text-xs flex items-start gap-2 border border-amber-200 dark:border-amber-800/80 font-medium"
+          >
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">{warningMsg}</span>
           </motion.div>
         )}
 

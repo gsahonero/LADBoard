@@ -9,6 +9,7 @@ export interface AuthUser {
   picture?: string;
   provider: 'google' | 'local';
   accessToken?: string;
+  expiresAt?: number;
 }
 
 export interface AuthState {

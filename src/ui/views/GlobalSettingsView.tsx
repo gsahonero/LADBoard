@@ -14,6 +14,9 @@ import {
   Sliders,
   Radio,
   ShieldCheck,
+  Loader2,
+  LogOut,
+  LogIn,
 } from 'lucide-react';
 
 interface GlobalSettingsViewProps {
@@ -35,6 +38,8 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
     (userRegistry?.preferences.active_evaluation_interval_ms || 30000) / 1000
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
@@ -64,12 +69,27 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
   };
 
   const handleConnectGoogle = async () => {
+    setIsConnectingGoogle(true);
     try {
       await connectGoogleDrive(DEFAULT_GDRIVE_CLIENT_ID);
-      setSuccessMsg('Connected to Google Account successfully!');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      setSuccessMsg(t('settings.connectedSuccess'));
+      setTimeout(() => setSuccessMsg(''), 3500);
     } catch (err: any) {
       alert(`Google Auth failed: ${err.message}`);
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+      authService.signOut();
+      setSuccessMsg(t('settings.signOutSuccess'));
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -164,18 +184,40 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
               {auth.isAuthenticated ? (
                 <button
                   type="button"
-                  onClick={() => authService.signOut()}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer shrink-0"
+                  onClick={handleSignOut}
+                  disabled={isSigningOut || isConnectingGoogle}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50"
                 >
-                  {t('settings.signOut')}
+                  {isSigningOut ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin text-rose-500 shrink-0" />
+                      <span>{t('settings.signingOut')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="w-3 h-3 text-rose-500 shrink-0" />
+                      <span>{t('settings.signOut')}</span>
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleConnectGoogle}
-                  className="px-3 py-1 text-[11px] font-bold bg-lad-600 text-white rounded-lg hover:bg-lad-700 transition-colors cursor-pointer shrink-0"
+                  disabled={isConnectingGoogle || isSigningOut}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold bg-lad-600 hover:bg-lad-700 text-white rounded-lg transition-all cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                 >
-                  {t('settings.signInGoogle')}
+                  {isConnectingGoogle ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin text-white shrink-0" />
+                      <span>{t('settings.connecting')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-3 h-3 shrink-0" />
+                      <span>{t('settings.signInGoogle')}</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>

@@ -30,8 +30,16 @@ export class AuthService {
       const stored = localStorage.getItem('lad_auth_user');
       if (stored) {
         const user = JSON.parse(stored) as AuthUser;
+        const isExpired = Boolean(
+          user.provider === 'google' && user.expiresAt && Date.now() > user.expiresAt
+        );
+
+        if (isExpired) {
+          user.accessToken = undefined;
+        }
+
         this.state = {
-          isAuthenticated: true,
+          isAuthenticated: Boolean(user.provider === 'local' || user.accessToken),
           user,
           isLoading: false,
           error: null,
@@ -40,6 +48,14 @@ export class AuthService {
     } catch {
       // Ignore
     }
+  }
+
+  isTokenExpired(): boolean {
+    if (!this.state.user) return true;
+    if (this.state.user.provider === 'local') return false;
+    if (!this.state.user.accessToken) return true;
+    if (this.state.user.expiresAt && Date.now() > this.state.user.expiresAt) return true;
+    return false;
   }
 
   subscribe(listener: (state: AuthState) => void): () => void {
@@ -148,6 +164,11 @@ export class AuthService {
               });
               const profile = await userRes.json();
 
+              const expiresIn = tokenResponse.expires_in
+                ? parseInt(tokenResponse.expires_in, 10)
+                : 3600;
+              const expiresAt = Date.now() + (expiresIn - 60) * 1000;
+
               const user: AuthUser = {
                 userId: `usr_g_${profile.sub?.substring(0, 10) || Math.random().toString(36).substring(2, 8)}`,
                 email: profile.email || 'google_user@gmail.com',
@@ -155,6 +176,7 @@ export class AuthService {
                 picture: profile.picture,
                 provider: 'google',
                 accessToken: tokenResponse.access_token,
+                expiresAt,
               };
 
               this.state = {
