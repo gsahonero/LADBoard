@@ -22,6 +22,7 @@ import { PeopleView } from './views/PeopleView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { CreateSpaceView } from './views/CreateSpaceView';
+import { SyncFallbackBanner } from './components/SyncFallbackBanner';
 import { LADLogo } from './components/LADLogo';
 
 import { motion, AnimatePresence, Variants } from 'framer-motion';
@@ -138,6 +139,9 @@ const AppContent: React.FC = () => {
       <div className="absolute inset-0 bg-mesh-pattern bg-radial-vignette pointer-events-none opacity-50 dark:opacity-30" />
       <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[120px] pointer-events-none" />
       <div className="absolute top-1/2 -right-32 w-80 h-80 rounded-full bg-teal-500/10 dark:bg-purple-600/10 blur-[130px] pointer-events-none" />
+
+      {/* Cloud Sync Offline Fallback Notification Banner */}
+      <SyncFallbackBanner />
 
       <AnimatePresence mode="wait">
         {activeTab === 'create_space' ? (

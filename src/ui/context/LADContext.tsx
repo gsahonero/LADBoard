@@ -111,7 +111,7 @@ export interface LADContextType {
   isLoading: boolean;
 }
 
-const LADContext = createContext<LADContextType | undefined>(undefined);
+export const LADContext = createContext<LADContextType | undefined>(undefined);
 
 export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authService] = useState(() => new AuthService());
@@ -288,6 +288,22 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const unsubSync = activeSpace.syncCoordinator.subscribe((state: SyncState) => {
       setSyncState({ ...state });
+
+      if (state.status === 'needs_attention' && state.errorMessage) {
+        activeSpace.activeEngine.addCustomAlert({
+          alert_id: 'alert_sync_fallback',
+          space_id: activeSpace.manifest.space_id,
+          type: 'sync_fallback',
+          target_id: 'gdrive_sync',
+          title: 'Google Drive Sync Failed',
+          message: 'Automatic cloud sync failed. Offline fallback active: your changes are safely preserved on this device.',
+          domain: 'system',
+          status: 'active',
+          created_at: new Date().toISOString(),
+        });
+      } else if (state.status === 'synced') {
+        activeSpace.activeEngine.dismissAlert('alert_sync_fallback');
+      }
     });
 
     activeSpace.syncCoordinator.startPeriodicSync(15000);

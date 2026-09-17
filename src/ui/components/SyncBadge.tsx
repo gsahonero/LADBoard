@@ -94,6 +94,11 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
           bg: 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
         };
       case 'needs_attention':
+        return {
+          icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-pulse" />,
+          text: syncState.errorMessage ? t('sync.offlineFallbackActive') : t('sync.needsAttention'),
+          bg: 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700',
+        };
       default:
         return {
           icon: <AlertCircle className="w-3.5 h-3.5 text-rose-500" />,
@@ -118,6 +123,13 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
         icon: <RefreshCw className="w-3 h-3 text-lad-500 animate-spin" />,
         text: t('sync.gdriveSyncing'),
         color: 'text-lad-600 dark:text-lad-400',
+      };
+    }
+    if (syncState.status === 'needs_attention' || syncState.errorMessage) {
+      return {
+        icon: <AlertTriangle className="w-3 h-3 text-amber-500" />,
+        text: t('sync.gdriveSyncFailed'),
+        color: 'text-amber-600 dark:text-amber-400',
       };
     }
     if (syncState.status === 'offline' || !syncState.isOnline) {
@@ -230,6 +242,8 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
                   <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                     {syncState.pendingOpsCount > 0
                       ? t('sync.offlinePending', { count: syncState.pendingOpsCount })
+                      : syncState.errorMessage
+                      ? t('sync.offlineSafeguard')
                       : t('sync.offlineAllSaved')}
                   </div>
                 </div>
@@ -238,8 +252,8 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
 
             {/* Error Message if present */}
             {syncState.errorMessage && (
-              <div className="mb-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-[11px] flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-500" />
+              <div className="mb-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-[11px] flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-amber-500" />
                 <span className="line-clamp-2">{syncState.errorMessage}</span>
               </div>
             )}
@@ -253,10 +267,10 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
                   else if (lad?.triggerSync) lad.triggerSync();
                 }}
                 disabled={syncState.status === 'syncing'}
-                className="w-full py-1.5 px-3 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                className="w-full py-1.5 px-3 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
-                <span>{t('sync.syncNow')}</span>
+                <span>{syncState.status === 'needs_attention' || syncState.errorMessage ? t('sync.retrySync') : t('sync.syncNow')}</span>
               </button>
             </div>
           </motion.div>

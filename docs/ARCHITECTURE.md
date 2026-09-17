@@ -39,10 +39,11 @@ LAD Board is implemented as a client-side, offline-first Progressive Web Applica
 7. **`core/sync`**: Bidirectional delta op synchronization between local and Google Drive storage:
    - **Push**: Uploads delta operations, writes updated `objects/${target}.json`, and syncs `graph/nodes.json` and `edges.json` to Google Drive.
    - **Pull**: Fetches remote operations, downloads remote object JSON files to local storage, and syncs remote graph changes.
-   - **Fallback**: Defaults to Google Drive when signed in, automatically preserving changes in `offlineQueue` on network or permission errors.
+   - **Fallback**: Defaults to Google Drive when signed in, automatically preserving changes in `offlineQueue` on network or permission errors. Never operates in mute: when automatic cloud sync fails, the user is prominently notified via an alert banner, attention cockpit alert, and pulsing badge.
 8. **`core/active`**: Active monitoring engine, rule triggers, notification dispatcher.
 9. **`core/i18n`**: Bilingual localization system (EN/ES) with zero untranslated UI strings.
 10. **`ui`**: Responsive, accessible, neurodiversity-conscious UI components:
+    - **Sync Fallback Notification Banner**: Prominent, dismissible banner alerting the user when Google Drive sync fails and offline fallback is active, with instant "Retry Sync" action and reassuring confirmation of local IndexedDB safety.
     - **Sync Status Pane**: Moving the cursor over the sync badge reveals a floating real-time status pane detailing Google Drive connection status, authenticated account email, and local IndexedDB offline storage status with pending operations count and direct "Sync Now" trigger.
     - **Lifecycle & Danger Zones**: Comprehensive workflows for Space Deletion, Space Leaving, and Complete Account & Cloud Data Erasure.
 

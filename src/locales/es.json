@@ -40,7 +40,14 @@
     "offlineActive": "IndexedDB Activo (Guardado localmente)",
     "offlinePending": "{count} operaciones locales pendientes",
     "offlineAllSaved": "Todos los cambios guardados en este dispositivo",
-    "accountLabel": "Cuenta"
+    "accountLabel": "Cuenta",
+    "offlineFallbackActive": "Guardado en dispositivo (Falló sincronización en nube)",
+    "gdriveSyncFailed": "Sincronización fallida (Respaldo local activo)",
+    "fallbackBannerTitle": "Error al Sincronizar con Google Drive",
+    "fallbackBannerMessage": "La sincronización automática con Google Drive falló. El respaldo local está activo: tus cambios están guardados de forma segura en este dispositivo y se sincronizarán al restablecer la conexión.",
+    "retrySync": "Reintentar Sincronización",
+    "offlineSafeguard": "Todos los cambios están guardados de forma segura en este dispositivo.",
+    "dismiss": "Descartar"
   },
   "spaces": {
     "title": "Espacios",

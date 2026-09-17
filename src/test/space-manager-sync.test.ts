@@ -340,9 +340,9 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     await loaded.syncCoordinator.triggerSync();
     const fallbackState = loaded.syncCoordinator.getState();
 
-    // Local changes are safely preserved in offlineQueue
+    // Local changes are safely preserved in offlineQueue, and status becomes needs_attention
     expect(loaded.offlineQueue.size()).toBe(1);
-    expect(fallbackState.status).toBe('pending_changes');
+    expect(fallbackState.status).toBe('needs_attention');
     expect(fallbackState.pendingOpsCount).toBe(1);
     expect(fallbackState.errorMessage).toContain('GDrive sync failed');
     expect(fallbackState.errorMessage).toContain('Preserved locally');

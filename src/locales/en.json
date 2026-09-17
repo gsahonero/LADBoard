@@ -40,7 +40,14 @@
     "offlineActive": "IndexedDB Active (Saved locally)",
     "offlinePending": "{count} pending local operations",
     "offlineAllSaved": "All changes saved to device",
-    "accountLabel": "Account"
+    "accountLabel": "Account",
+    "offlineFallbackActive": "Saved on device (Cloud sync failed)",
+    "gdriveSyncFailed": "Sync failed (Offline fallback active)",
+    "fallbackBannerTitle": "Google Drive Sync Failed",
+    "fallbackBannerMessage": "Automatic sync to Google Drive failed. Offline fallback is active: your changes are safely preserved on this device and will sync when connection is restored.",
+    "retrySync": "Retry Sync",
+    "offlineSafeguard": "All changes are safely preserved on this device.",
+    "dismiss": "Dismiss"
   },
   "spaces": {
     "title": "Spaces",

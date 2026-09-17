@@ -189,7 +189,7 @@ export interface LADInvitation {
 export interface LADActiveAlert {
   alert_id: string;
   space_id: string;
-  type: 'stale_balance' | 'upcoming_event' | 'unresolved_shopping' | 'pending_followup' | 'agent_proposal';
+  type: 'stale_balance' | 'upcoming_event' | 'unresolved_shopping' | 'pending_followup' | 'agent_proposal' | 'sync_fallback' | string;
   target_id: string; // object_id or agent_id
   title: string;
   message: string;
