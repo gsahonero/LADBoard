@@ -442,5 +442,25 @@
     "balanceLabel": "Balance ($)",
     "assignedToLabel": "Assigned to",
     "priorityLabel": "Priority"
+  },
+  "joinModal": {
+    "title": "Space Invitation",
+    "authRequiredTitle": "Google Sign-In Required",
+    "authRequiredDesc": "To access this collaborative Space, please sign in with your Google account. This verifies your invitation and allows secure sync with Google Drive.",
+    "signInWithGoogle": "Sign In with Google",
+    "verifying": "Verifying Space Invitation...",
+    "verifyingDetail": "Checking manifest and folder permissions on Google Drive",
+    "mismatchTitle": "Access Denied: Account Mismatch",
+    "mismatchDesc": "Possession of the invitation link alone does not grant access. You must sign into LAD Board using the exact Google email address invited.",
+    "invitedAccount": "Invited Account",
+    "currentAccount": "Signed-in Account",
+    "switchAccount": "Switch Google Account",
+    "invitedBy": "Invited By",
+    "roleAssigned": "Assigned Role",
+    "identityVerifiedNotice": "Identity verified for {email}. Ready to sync with Google Drive.",
+    "acceptButton": "Accept Invitation & Join Space",
+    "decline": "Decline Invitation",
+    "notFoundTitle": "Space Unavailable",
+    "notFoundDesc": "Could not access this Space. The space may have been deleted or Google Drive permissions have not yet propagated."
   }
 }

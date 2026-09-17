@@ -4,6 +4,7 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { ModernIcon, ModernIconName } from '../components/ModernIcon';
 import { deriveCalendarEvents, generateIcsContent, downloadIcsFile } from '../../core/calendar/calendar-sync';
 import { resolveSpaceIcon, SPACE_COLOR_PRESETS, SpaceColorOption } from '../../core/theme/space-identity';
+import { getShareableJoinUrl } from '../../core/sharing/google-sharing-service';
 import {
   Sliders,
   Calendar,
@@ -24,6 +25,8 @@ import {
 interface SpaceSettingsViewProps {
   onSwitchToGlobal?: () => void;
 }
+
+export { getShareableJoinUrl };
 
 export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchToGlobal }) => {
   const { activeManifest, updateSpaceIdentity, objects, authService } = useLAD();
@@ -170,7 +173,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
 
   const handleCopyInviteLink = () => {
     if (typeof navigator !== 'undefined' && activeManifest) {
-      const link = `${window.location.origin}/?join=${activeManifest.space_id}`;
+      const link = getShareableJoinUrl(activeManifest.space_id);
       navigator.clipboard.writeText(link);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
@@ -593,7 +596,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
               <input
                 type="text"
                 readOnly
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${activeManifest.space_id}`}
+                value={getShareableJoinUrl(activeManifest.space_id)}
                 className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] font-mono text-slate-500 border border-slate-200 dark:border-slate-700 truncate"
               />
               <button

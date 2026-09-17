@@ -19,6 +19,7 @@ import {
 import { ModernIcon } from '../components/ModernIcon';
 import { MobileDrawer } from '../components/MobileDrawer';
 import { WeatherPill } from '../components/WeatherPill';
+import { LADLogo } from '../components/LADLogo';
 import {
   resolveSpaceIcon,
   getSpaceColorConfig,
@@ -149,12 +150,7 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
         {/* 1. Zen Minimalist Top Bar — Fully Responsive on Mobile */}
         <header className="flex items-center justify-between gap-2.5 pb-4 sm:pb-8">
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-            <div
-              style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))' }}
-              className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center text-white font-black text-sm sm:text-base shadow-lg border border-white/20 shrink-0"
-            >
-              LAD
-            </div>
+            <LADLogo size={42} className="shrink-0 shadow-md" />
             <div className="min-w-0">
               <span className="font-extrabold text-sm sm:text-base tracking-tight text-slate-900 dark:text-white block leading-tight truncate">
                 {t('app.title')}

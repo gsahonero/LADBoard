@@ -10,6 +10,7 @@ import { Header } from './components/Header';
 import { Navigation, ActiveTab } from './components/Navigation';
 import { CaptureModal } from './components/CaptureModal';
 import { SpaceManagerModal } from './components/SpaceManagerModal';
+import { JoinSpaceModal } from './components/JoinSpaceModal';
 import { OnboardingView } from './views/OnboardingView';
 import { HubLandingView } from './views/HubLandingView';
 import { TopicDashboardView } from './views/TopicDashboardView';
@@ -21,6 +22,7 @@ import { PeopleView } from './views/PeopleView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { CreateSpaceView } from './views/CreateSpaceView';
+import { LADLogo } from './components/LADLogo';
 
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 
@@ -92,9 +94,9 @@ const AppContent: React.FC = () => {
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-xl flex items-center justify-center shadow-xl shadow-blue-500/20"
+            className="flex items-center justify-center shadow-xl shadow-blue-500/20 rounded-2xl"
           >
-            LAD
+            <LADLogo size={56} />
           </motion.div>
           <div className="text-xs font-bold text-slate-500 tracking-wide">Living Active Dynamic Board</div>
         </motion.div>
@@ -238,6 +240,9 @@ const AppContent: React.FC = () => {
         onClose={() => setSpaceModalOpen(false)}
         onOpenCreateSpace={() => setActiveTab('create_space')}
       />
+
+      {/* Join Space Modal (opens when URL has ?join=spc_... or pending invite) */}
+      <JoinSpaceModal />
     </div>
   );
 };

@@ -126,7 +126,8 @@ export class AuthService {
       try {
         this.tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/drive.file email profile openid',
+          scope:
+            'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse.error) {
               this.state = {

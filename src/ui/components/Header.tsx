@@ -6,6 +6,7 @@ import { Plus, Globe, ChevronDown, Sparkles, Menu } from 'lucide-react';
 import { resolveSpaceIcon, getSpaceColorConfig } from '../../core/theme/space-identity';
 import { ModernIcon } from './ModernIcon';
 import { MobileDrawer } from './MobileDrawer';
+import { LADLogo } from './LADLogo';
 
 export const Header: React.FC<{
   onOpenCapture: () => void;
@@ -30,15 +31,10 @@ export const Header: React.FC<{
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={onGoToHub}
-              className="flex items-center gap-2 hover:opacity-85 transition-opacity text-left cursor-pointer shrink-0"
+              className="flex items-center gap-2.5 hover:opacity-90 transition-opacity text-left cursor-pointer shrink-0"
               title="Return to Main Hub"
             >
-              <div
-                style={{ backgroundColor: 'var(--color-primary)' }}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-sm"
-              >
-                LAD
-              </div>
+              <LADLogo size={32} className="shrink-0 shadow-xs" />
               <div className="hidden md:block">
                 <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
                   {t('app.title')}

@@ -14,6 +14,11 @@ import { TelemetryBus } from '../../core/telemetry/telemetry-bus';
 import { InferredStructure } from '../../core/objects/types';
 import { PaletteManager } from '../../core/theme/palette-manager';
 import { DEFAULT_GDRIVE_CLIENT_ID } from '../../core/standard/constants';
+import {
+  shareSpaceDriveFolder,
+  sendGmailInvitation,
+  getShareableJoinUrl,
+} from '../../core/sharing/google-sharing-service';
 
 export interface LADContextType {
   // Identity & Auth
@@ -47,6 +52,12 @@ export interface LADContextType {
   updateSpaceSettings: (spaceId: string, settings: Partial<LADSpaceSettings>) => Promise<void>;
   renameSpace: (spaceId: string, newName: string, description?: string) => Promise<void>;
   inviteMember: (email: string, role?: 'owner' | 'editor' | 'viewer', name?: string) => Promise<void>;
+  
+  // Space Joining & Invitations
+  pendingJoinSpaceId: string | null;
+  joinSpace: (spaceId: string) => Promise<boolean>;
+  dismissPendingJoinSpace: () => void;
+  storageManager: StorageManager;
 
   // Objects & State
   objects: LADObject[];
@@ -79,7 +90,7 @@ export interface LADContextType {
   // Settings
   updatePreferences: (prefs: Partial<LADUserRegistry['preferences']>) => Promise<void>;
   updateProfile: (displayName: string, email?: string) => Promise<void>;
-  connectGoogleDrive: (clientId: string) => Promise<void>;
+  connectGoogleDrive: (clientId?: string) => Promise<void>;
 
   isLoading: boolean;
 }
@@ -94,6 +105,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [userRegistry, setUserRegistry] = useState<LADUserRegistry | null>(null);
   const [activeSpace, setActiveSpace] = useState<LoadedSpace | null>(null);
+  const [pendingJoinSpaceId, setPendingJoinSpaceId] = useState<string | null>(null);
 
   const [objects, setObjects] = useState<LADObject[]>([]);
   const [nodes, setNodes] = useState<LADGraphNode[]>([]);
@@ -145,10 +157,31 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         PaletteManager.applyPalette(registry.preferences.palette_theme as any);
       }
 
-      // Load initial active space
-      const initialSpaceRef = registry.spaces[0];
-      const initialSpaceId = initialSpaceRef?.space_id || 'spc_default';
-      const initialSpaceName = initialSpaceRef?.space_name || 'Personal';
+      // Check if URL has ?join=spc_... or ?space=spc_...
+      let initialSpaceRef = registry.spaces[0];
+      let initialSpaceId = initialSpaceRef?.space_id || 'spc_default';
+      let initialSpaceName = initialSpaceRef?.space_name || 'Personal';
+
+      if (typeof window !== 'undefined') {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const joinSpaceId = params.get('join') || params.get('space');
+          if (joinSpaceId && joinSpaceId.startsWith('spc_')) {
+            const existingRef = registry.spaces.find((s) => s.space_id === joinSpaceId);
+            if (existingRef) {
+              initialSpaceRef = existingRef;
+              initialSpaceId = existingRef.space_id;
+              initialSpaceName = existingRef.space_name;
+            } else {
+              // Open Join Space flow to verify identity before adding to registry
+              setPendingJoinSpaceId(joinSpaceId);
+            }
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
       const loaded = await spManager.loadSpace(
         initialSpaceId,
         registry.user_id,
@@ -332,6 +365,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const inviteMember = useCallback(
     async (email: string, role: 'owner' | 'editor' | 'viewer' = 'editor', name?: string) => {
       if (!spaceManager || !activeSpace || !userRegistry) return;
+
+      // 1. Create invitation record in graph and operation log
       await spaceManager.createInvitation(
         activeSpace.manifest.space_id,
         userRegistry.user_id,
@@ -339,10 +374,145 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         role,
         name
       );
+
+      // 2. Dispatch Drive permissions & Gmail notification if Google Auth is active
+      const auth = authService.getState();
+      const accessToken = auth.user?.accessToken;
+      if (auth.isAuthenticated && accessToken && auth.user?.provider === 'google') {
+        const remoteProvider = storageManager.getRemoteProvider();
+        let folderId: string | undefined;
+
+        if (remoteProvider && 'resolveFolderPath' in remoteProvider) {
+          try {
+            folderId = await (remoteProvider as any).resolveFolderPath(`LAD/${activeSpace.manifest.space_id}`);
+          } catch (e) {
+            console.warn('Could not resolve GDrive folder ID for space:', e);
+          }
+        }
+
+        if (folderId) {
+          await shareSpaceDriveFolder(
+            accessToken,
+            folderId,
+            email,
+            role === 'viewer' ? 'viewer' : 'editor'
+          );
+        }
+
+        const joinUrl = getShareableJoinUrl(activeSpace.manifest.space_id);
+        const inviterName = userRegistry.identities[0]?.display_name || auth.user.name || 'LAD Board User';
+        const inviterEmail = userRegistry.identities[0]?.email || auth.user.email || '';
+
+        await sendGmailInvitation(accessToken, {
+          toEmail: email,
+          invitedName: name,
+          spaceName: activeSpace.manifest.space_name,
+          spaceId: activeSpace.manifest.space_id,
+          inviterName,
+          inviterEmail,
+          role: role === 'viewer' ? 'viewer' : 'editor',
+          joinUrl,
+        });
+      }
+
       refreshSpaceState();
     },
-    [spaceManager, activeSpace, userRegistry, refreshSpaceState]
+    [spaceManager, activeSpace, userRegistry, authService, storageManager, refreshSpaceState]
   );
+
+  const joinSpace = useCallback(
+    async (spaceId: string): Promise<boolean> => {
+      if (!spaceManager || !userRegistry || !userRegistryManager) return false;
+      try {
+        const auth = authService.getState();
+        const userEmail = auth.user?.email || userRegistry.identities[0]?.email;
+        const userName = auth.user?.name || userRegistry.identities[0]?.display_name || 'Collaborator';
+
+        // Load space replica into memory & local storage
+        const loaded = await spaceManager.loadSpace(
+          spaceId,
+          userRegistry.user_id,
+          userRegistry.preferences.change_commit_threshold_ms,
+          undefined,
+          userName,
+          userEmail
+        );
+
+        if (storageManager.getRemoteProvider()) {
+          loaded.syncCoordinator.setRemoteStorage(storageManager.getRemoteProvider());
+        }
+
+        // Commit membership.accept operation
+        await loaded.changeAggregator.commitImmediate({
+          targetId: `usr_${userRegistry.user_id}`,
+          type: 'membership.accept',
+          actor: userRegistry.user_id,
+          spaceId,
+          patch: {
+            userId: userRegistry.user_id,
+            email: userEmail,
+            name: userName,
+            acceptedAt: new Date().toISOString(),
+          },
+        });
+
+        // Ensure user node in graph is active
+        await loaded.graphStore.ensureNodeForEntity(userRegistry.user_id, 'user', userName, {
+          name: userName,
+          email: userEmail,
+          status: 'active',
+          role: 'editor',
+        });
+
+        // Add to user registry if not already present
+        const existingRef = userRegistry.spaces.find((s) => s.space_id === spaceId);
+        if (!existingRef) {
+          const isGoogle = auth.isAuthenticated && auth.user?.provider === 'google';
+          await userRegistryManager.addSpace({
+            space_id: spaceId,
+            space_name: loaded.manifest.space_name,
+            icon: loaded.manifest.icon,
+            color: loaded.manifest.color,
+            description: loaded.manifest.description,
+            categories: loaded.manifest.categories,
+            storage_provider: isGoogle ? 'google_drive' : 'local_indexeddb',
+            storage_reference: spaceId,
+            role: 'editor',
+            status: 'active',
+            last_synced_at: new Date().toISOString(),
+          });
+          setUserRegistry({ ...userRegistryManager.getRegistry()! });
+        }
+
+        setActiveSpace(loaded);
+        setObjects(loaded.objectStore.getAll());
+        setNodes(loaded.graphStore.getNodes());
+        setEdges(loaded.graphStore.getEdges());
+        setOperations(loaded.operationLog.getOperations());
+        setPendingJoinSpaceId(null);
+
+        if (typeof window !== 'undefined') {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+
+        TelemetryBus.getInstance().record('user_interaction', 'space_joined', { spaceId });
+        return true;
+      } catch (err) {
+        console.error('Failed to join space:', err);
+        return false;
+      }
+    },
+    [spaceManager, userRegistry, userRegistryManager, authService, storageManager]
+  );
+
+  const dismissPendingJoinSpace = useCallback(() => {
+    setPendingJoinSpaceId(null);
+    if (typeof window !== 'undefined') {
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, []);
 
   const createObjectFromCapture = useCallback(
     async (structure: InferredStructure): Promise<LADObject> => {
@@ -641,6 +811,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateSpaceSettings,
         renameSpace,
         inviteMember,
+        pendingJoinSpaceId,
+        joinSpace,
+        dismissPendingJoinSpace,
+        storageManager,
         objects,
         createObjectFromCapture,
         updateObject,

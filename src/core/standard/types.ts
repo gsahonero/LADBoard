@@ -159,7 +159,8 @@ export type LADOperationType =
   | 'graph.edge.remove'
   | 'space.manifest.update'
   | 'invitation.create'
-  | 'invitation.accept';
+  | 'invitation.accept'
+  | 'membership.accept';
 
 export interface LADOperation {
   operation_id: string; // "op_..."

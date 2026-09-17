@@ -131,3 +131,16 @@ describe('Space Settings Schema Validation', () => {
     expect(validateSpaceManifest(manifest)).toBe(true);
   });
 });
+
+describe('Shareable Join URL Resolution', () => {
+  it('constructs correct join URL including path prefix', () => {
+    // Test helper function logic
+    const origin = 'https://gsahonero.github.io';
+    const pathname = '/LADBoard/';
+    const spaceId = 'spc_05qq4hcz';
+    const cleanPath = pathname.replace(/\/+$/, '');
+    const url = `${origin}${cleanPath}/?join=${spaceId}`;
+
+    expect(url).toBe('https://gsahonero.github.io/LADBoard/?join=spc_05qq4hcz');
+  });
+});

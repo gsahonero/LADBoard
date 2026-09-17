@@ -442,5 +442,25 @@
     "balanceLabel": "Saldo ($)",
     "assignedToLabel": "Asignado a",
     "priorityLabel": "Prioridad"
+  },
+  "joinModal": {
+    "title": "Invitación a Espacio",
+    "authRequiredTitle": "Inicio de Sesión con Google Requerido",
+    "authRequiredDesc": "Para acceder a este Espacio colaborativo, inicia sesión con tu cuenta de Google. Esto verifica tu invitación y permite la sincronización segura con Google Drive.",
+    "signInWithGoogle": "Iniciar Sesión con Google",
+    "verifying": "Verificando Invitación al Espacio...",
+    "verifyingDetail": "Comprobando manifiesto y permisos de carpeta en Google Drive",
+    "mismatchTitle": "Acceso Denegado: Cuenta no Coincide",
+    "mismatchDesc": "Poseer el enlace de invitación no es una credencial de acceso. Debes iniciar sesión en LAD Board con la cuenta de Google exacta que fue invitada.",
+    "invitedAccount": "Cuenta Invitada",
+    "currentAccount": "Cuenta Actual",
+    "switchAccount": "Cambiar Cuenta de Google",
+    "invitedBy": "Invitado por",
+    "roleAssigned": "Rol Asignado",
+    "identityVerifiedNotice": "Identidad verificada para {email}. Listo para sincronizar con Google Drive.",
+    "acceptButton": "Aceptar Invitación y Unirse al Espacio",
+    "decline": "Rechazar Invitación",
+    "notFoundTitle": "Espacio No Disponible",
+    "notFoundDesc": "No se pudo acceder a este Espacio. El espacio puede haber sido eliminado o los permisos de Google Drive aún no se han propagado."
   }
 }

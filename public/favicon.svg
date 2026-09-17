@@ -1,9 +1,82 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <rect width="100" height="100" rx="24" fill="#026bc9"/>
-  <circle cx="50" cy="50" r="30" stroke="#ffffff" stroke-width="6" stroke-dasharray="6 4" />
-  <circle cx="34" cy="40" r="8" fill="#36a5f7"/>
-  <circle cx="66" cy="40" r="8" fill="#36a5f7"/>
-  <circle cx="50" cy="68" r="10" fill="#ffffff"/>
-  <line x1="34" y1="40" x2="50" y2="68" stroke="#ffffff" stroke-width="4"/>
-  <line x1="66" y1="40" x2="50" y2="68" stroke="#ffffff" stroke-width="4"/>
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ladBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#2563EB" />
+      <stop offset="50%" stopColor="#3B82F6" />
+      <stop offset="100%" stopColor="#1D4ED8" />
+    </linearGradient>
+    <linearGradient id="ladRibbonGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#38BDF8" />
+      <stop offset="50%" stopColor="#818CF8" />
+      <stop offset="100%" stopColor="#FFFFFF" />
+    </linearGradient>
+    <linearGradient id="ladStarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FDE047" />
+      <stop offset="100%" stopColor="#F59E0B" />
+    </linearGradient>
+    <linearGradient id="ladPencilGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="70%" stopColor="#E2E8F0" />
+      <stop offset="100%" stopColor="#94A3B8" />
+    </linearGradient>
+    <filter id="ladGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect width="120" height="120" rx="30" fill="url(#ladBgGrad)" />
+  <rect x="1" y="1" width="118" height="118" rx="29" stroke="rgba(255, 255, 255, 0.25)" stroke-width="2" />
+
+  <!-- Dynamic Gear Accent -->
+  <g opacity="0.32" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round">
+    <path d="M 42 28 A 26 26 0 0 1 78 28" stroke-dasharray="4 6" stroke-width="4" />
+    <path d="M 28 42 A 26 26 0 0 0 28 78" stroke-dasharray="4 6" stroke-width="4" />
+  </g>
+
+  <!-- Living Flow Wave -->
+  <path
+    d="M 28 84 C 42 98, 68 96, 78 78 C 86 64, 82 46, 68 40 C 56 34, 46 44, 44 54 C 42 66, 52 76, 66 74 C 84 72, 94 54, 92 36"
+    stroke="url(#ladRibbonGrad)"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#ladGlow)"
+  />
+
+  <!-- Active Forward Momentum Arrow -->
+  <path
+    d="M 85 36 L 93 35 L 94 44"
+    stroke="#FFFFFF"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Stylized Writing Pencil -->
+  <g transform="translate(30, 72) rotate(-42)">
+    <path d="M 0 -6 L 24 -6 L 24 6 L 0 6 Z" fill="url(#ladPencilGrad)" rx="1" />
+    <path d="M 0 -6 L -10 0 L 0 6 Z" fill="#F8FAFC" />
+    <path d="M -6 -2.4 L -10 0 L -6 2.4 Z" fill="#1E293B" />
+    <line x1="16" y1="-6" x2="16" y2="6" stroke="#94A3B8" stroke-width="1.5" />
+  </g>
+
+  <!-- Radiant Spark / Star -->
+  <g transform="translate(74, 30)">
+    <path
+      d="M 0 -12 C 0 -3.5, 3.5 0, 12 0 C 3.5 0, 0 3.5, 0 12 C 0 3.5, -3.5 0, -12 0 C -3.5 0, 0 -3.5, 0 -12 Z"
+      fill="url(#ladStarGrad)"
+    />
+    <circle cx="0" cy="0" r="2.5" fill="#FFFFFF" />
+  </g>
+
+  <!-- Harmonizing Sparkle -->
+  <g transform="translate(34, 36) scale(0.55)">
+    <path
+      d="M 0 -10 C 0 -3, 3 0, 10 0 C 3 0, 0 3, 0 10 C 0 3, -3 0, -10 0 C -3 0, 0 -3, 0 -10 Z"
+      fill="#FFFFFF"
+      opacity="0.85"
+    />
+  </g>
 </svg>
