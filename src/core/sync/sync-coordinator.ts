@@ -10,6 +10,7 @@ import { SyncState } from './types';
 import { LADOperation } from '../standard/types';
 import { ObjectStore } from '../objects/object-store';
 import { GraphStore } from '../graph/graph-store';
+import { SchemaRegistry } from '../schemas/schema-registry';
 
 export class SyncCoordinator {
   private spaceId: string;
@@ -177,6 +178,11 @@ export class SyncCoordinator {
                   await this.remoteStorage.writeFile(`LAD/${this.spaceId}/objects/${localOp.target}.json`, obj);
                 }
               }
+              // Mirror graph nodes and edges so card entities and relationships are backed up to cloud
+              const nodes = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (nodes) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, nodes);
+              const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (edges) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, edges);
             } else if (localOp.type === 'space.manifest.update') {
               const manifest = await this.localStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
               if (manifest) {
@@ -241,10 +247,24 @@ export class SyncCoordinator {
                   }
                 }
               }
+              // Also pull updated graph nodes and edges from remote
+              const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (remoteNodes) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
+                if (this.graphStore) await this.graphStore.load();
+              }
+              const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (remoteEdges) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
+                if (this.graphStore) await this.graphStore.load();
+              }
             } else if (newOp.type === 'space.manifest.update') {
-              const remoteManifest = await this.remoteStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
+              const remoteManifest = await this.remoteStorage.readFile<any>(`LAD/${this.spaceId}/manifest.json`);
               if (remoteManifest) {
                 await this.localStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, remoteManifest);
+                if (remoteManifest.settings?.custom_card_types) {
+                  SchemaRegistry.getInstance().importCustomCardTypes(remoteManifest.settings.custom_card_types);
+                }
               }
             } else if (newOp.type.startsWith('graph.node.')) {
               const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);

@@ -21,6 +21,7 @@ import {
   sendGmailInvitation,
   getShareableJoinUrl,
 } from '../../core/sharing/google-sharing-service';
+import { SchemaRegistry } from '../../core/schemas/schema-registry';
 
 export interface LADContextType {
   // Identity & Auth
@@ -258,6 +259,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         loaded.syncCoordinator.setRemoteStorage(storageManager.getRemoteProvider());
       }
 
+      if (loaded.manifest.settings?.custom_card_types) {
+        SchemaRegistry.getInstance().importCustomCardTypes(loaded.manifest.settings.custom_card_types);
+      }
+
       if (!mounted) return;
       setActiveSpace(loaded);
       setObjects(loaded.objectStore.getAll());
@@ -308,6 +313,9 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       } else if (state.status === 'synced') {
         activeSpace.activeEngine.dismissAlert('alert_sync_fallback');
+        if (activeSpace.manifest.settings?.custom_card_types) {
+          SchemaRegistry.getInstance().importCustomCardTypes(activeSpace.manifest.settings.custom_card_types);
+        }
         // Refresh space state on successful sync (manifest, objects, graph)
         setObjects(activeSpace.objectStore.getAll());
         setNodes(activeSpace.graphStore.getNodes());
@@ -354,6 +362,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         userRegistry.identities[0]?.display_name,
         userRegistry.identities[0]?.email
       );
+      if (loaded.manifest.settings?.custom_card_types) {
+        SchemaRegistry.getInstance().importCustomCardTypes(loaded.manifest.settings.custom_card_types);
+      }
+
       setActiveSpace(loaded);
       setObjects(loaded.objectStore.getAll());
       setNodes(loaded.graphStore.getNodes());
@@ -436,6 +448,9 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     ) => {
       if (!spaceManager || !userRegistryManager) return;
+      if (patch.settings?.custom_card_types) {
+        SchemaRegistry.getInstance().importCustomCardTypes(patch.settings.custom_card_types);
+      }
       await userRegistryManager.updateSpaceIdentity(spaceId, patch);
       const actor = userRegistryManager.getRegistry()?.user_id;
       const updatedManifest = await spaceManager.updateSpaceManifest(spaceId, patch, actor);

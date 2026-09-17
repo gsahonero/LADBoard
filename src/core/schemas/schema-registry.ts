@@ -99,6 +99,15 @@ export class SchemaRegistry {
     return Array.from(this.customCardTypes.values());
   }
 
+  importCustomCardTypes(types: LADCardTypeDefinition[]): void {
+    if (!types || !Array.isArray(types)) return;
+    for (const type of types) {
+      if (type && type.id) {
+        this.customCardTypes.set(type.id, { ...type, isDefault: false });
+      }
+    }
+  }
+
   /**
    * Singleton instance for general use
    */
