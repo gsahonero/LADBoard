@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { useNavigationGuard } from '../context/NavigationGuardContext';
 import { SyncBadge } from './SyncBadge';
 import { ModernIcon } from './ModernIcon';
 import { resolveSpaceIcon, getSpaceColorConfig } from '../../core/theme/space-identity';
@@ -43,6 +44,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
     userRegistry,
     objects,
   } = useLAD();
+  const { confirmNavigation } = useNavigationGuard();
   const { locale, setLocale, t } = useI18n();
 
   const activeIcon = resolveSpaceIcon(activeManifest?.icon, activeManifest?.space_name);
@@ -141,8 +143,10 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
                   <button
                     onClick={() => {
-                      onClose();
-                      onOpenSpaceManager();
+                      confirmNavigation(() => {
+                        onClose();
+                        onOpenSpaceManager();
+                      });
                     }}
                     className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs transition-colors shrink-0 cursor-pointer"
                   >
@@ -165,8 +169,10 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                           <button
                             key={s.space_id}
                             onClick={() => {
-                              switchSpace(s.space_id);
-                              onClose();
+                              confirmNavigation(() => {
+                                switchSpace(s.space_id);
+                                onClose();
+                              });
                             }}
                             className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer border ${
                               isSelected
@@ -186,8 +192,10 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                       {onOpenCreateSpace && (
                         <button
                           onClick={() => {
-                            onClose();
-                            onOpenCreateSpace();
+                            confirmNavigation(() => {
+                              onClose();
+                              onOpenCreateSpace();
+                            });
                           }}
                           className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 border border-blue-200/60 dark:border-blue-800/60 flex items-center gap-1 whitespace-nowrap cursor-pointer"
                         >
@@ -244,8 +252,10 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                 {/* Settings View */}
                 <button
                   onClick={() => {
-                    onClose();
-                    onOpenSettings();
+                    confirmNavigation(() => {
+                      onClose();
+                      onOpenSettings();
+                    });
                   }}
                   className="w-full p-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between transition-colors cursor-pointer"
                 >

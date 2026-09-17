@@ -16,8 +16,8 @@ import {
   Sparkles,
   Calendar,
   User,
-  CheckCircle2,
-  Circle,
+  CheckSquare,
+  Square,
   Trash2,
   Edit2,
   Clock,
@@ -371,7 +371,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     </div>
                   )}
                 </div>
-              ) : registeredCardTypeDef && registeredCardTypeDef.fields.length > 0 ? (
+              ) : registeredCardTypeDef ? (
                 /* Dynamic View for Custom or Registered Card Types */
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
@@ -411,13 +411,32 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                         );
                       }
 
+                      if (field.type === 'select') {
+                        return (
+                          <div key={field.key} className="text-xs">
+                            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">
+                              {field.label}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
+                              {String(val)}
+                            </span>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div key={field.key} className="text-xs">
-                          <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">
                             {field.label}
                           </span>
                           <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {field.type === 'currency' ? `$${Number(val).toLocaleString()}` : String(val)}
+                            {field.type === 'currency' ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
+                                ${Number(val).toLocaleString('en-US')}
+                              </span>
+                            ) : (
+                              String(val)
+                            )}
                           </span>
                         </div>
                       );
@@ -436,12 +455,12 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   <motion.button
                     whileTap={{ scale: 0.8 }}
                     onClick={handleToggleCompleted}
-                    className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors"
+                    className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
                   >
                     {isCompleted ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <CheckSquare className="w-4 h-4 text-emerald-500" />
                     ) : (
-                      <Circle className="w-4 h-4" />
+                      <Square className="w-4 h-4" />
                     )}
                   </motion.button>
                   <div className="flex-1">

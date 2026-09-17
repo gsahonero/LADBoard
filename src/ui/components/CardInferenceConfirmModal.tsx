@@ -141,75 +141,102 @@ export const CardInferenceConfirmModal: React.FC<CardInferenceConfirmModalProps>
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {fieldValues.bank && (
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">Bank</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{fieldValues.bank}</span>
-                    </div>
+                  {/* Dynamic Schema Fields */}
+                  {cardType && cardType.fields ? (
+                    cardType.fields.map((field) => {
+                      if (field.key === 'title') return null;
+                      const val = fieldValues[field.key];
+                      if (val === undefined || val === '' || val === null) return null;
+
+                      if (field.type === 'currency') {
+                        return (
+                          <div key={field.key} className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+                            <span className="text-[9px] font-bold block uppercase opacity-80">{field.label}</span>
+                            <span className="text-sm font-black">${Number(val).toLocaleString()}</span>
+                          </div>
+                        );
+                      }
+
+                      if (field.type === 'select') {
+                        return (
+                          <div key={field.key} className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+                            <span className="text-[9px] font-bold text-slate-400 block uppercase">{field.label}</span>
+                            <span className="inline-flex items-center px-2 py-0.5 mt-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
+                              {String(val)}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      if (field.type === 'checklist' && Array.isArray(val) && val.length > 0) {
+                        return (
+                          <div key={field.key} className="p-2 sm:col-span-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+                            <span className="text-[9px] font-bold text-slate-400 block uppercase mb-1">
+                              {field.label} ({val.length} items)
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {val.map((it: any, i: number) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[11px] text-slate-700 dark:text-slate-200 font-medium"
+                                >
+                                  {typeof it === 'string' ? it : it.text}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={field.key} className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">{field.label}</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{String(val)}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <>
+                      {fieldValues.bank && (
+                        <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Bank</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{fieldValues.bank}</span>
+                        </div>
+                      )}
+
+                      {fieldValues.account_type && (
+                        <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Account Type</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">{fieldValues.account_type}</span>
+                        </div>
+                      )}
+
+                      {fieldValues.balance !== undefined && (
+                        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+                          <span className="text-[9px] font-bold block uppercase opacity-80">Balance</span>
+                          <span className="text-sm font-black">${Number(fieldValues.balance).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {fieldValues.account_type && (
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">Account Type</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">{fieldValues.account_type}</span>
-                    </div>
-                  )}
-
-                  {fieldValues.balance !== undefined && (
-                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
-                      <span className="text-[9px] font-bold block uppercase opacity-80">Balance</span>
-                      <span className="text-sm font-black">${Number(fieldValues.balance).toLocaleString()}</span>
-                    </div>
-                  )}
-
-                  {fieldValues.specialty && (
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">Specialty</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{fieldValues.specialty}</span>
-                    </div>
-                  )}
-
-                  {fieldValues.patient && fieldValues.patient !== 'Me' && (
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                      <div>
-                        <span className="text-[9px] font-bold text-slate-400 block uppercase">Patient</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{fieldValues.patient}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {fieldValues.estimated_budget !== undefined && (
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">Budget</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">${fieldValues.estimated_budget}</span>
-                    </div>
-                  )}
-
-                  {fieldValues.checklist && fieldValues.checklist.length > 0 && (
-                    <div className="p-2 sm:col-span-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase mb-1">
-                        Checklist ({fieldValues.checklist.length} items)
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {fieldValues.checklist.map((it: any, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[11px] text-slate-700 dark:text-slate-200 font-medium"
-                          >
-                            {typeof it === 'string' ? it : it.text}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
+                  {/* Due Date & Assignee */}
                   {inferred.dueDate && (
                     <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                       <div>
                         <span className="text-[9px] font-bold text-slate-400 block uppercase">Due / Target</span>
                         <span className="font-semibold text-slate-800 dark:text-slate-200">{inferred.dueDate}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {inferred.assignedTo && inferred.assignedTo !== 'Me' && (
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 block uppercase">Assigned To</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{inferred.assignedTo}</span>
                       </div>
                     </div>
                   )}

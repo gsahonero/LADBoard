@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { useNavigationGuard } from '../context/NavigationGuardContext';
 import { SyncBadge } from './SyncBadge';
 import { Plus, Globe, ChevronDown, Sparkles, Menu } from 'lucide-react';
 import { resolveSpaceIcon, getSpaceColorConfig } from '../../core/theme/space-identity';
@@ -16,6 +17,7 @@ export const Header: React.FC<{
   onGoToHub?: () => void;
 }> = ({ onOpenCapture, onOpenSpaceManager, onOpenCreateSpace, onOpenSettings, onGoToHub }) => {
   const { activeManifest, syncState, triggerSync, spaces, switchSpace } = useLAD();
+  const { confirmNavigation } = useNavigationGuard();
   const { locale, setLocale, t } = useI18n();
   const [spaceDropdownOpen, setSpaceDropdownOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -30,7 +32,11 @@ export const Header: React.FC<{
           {/* Left: App Logo & Space Selector */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
-              onClick={onGoToHub}
+              onClick={() => {
+                if (onGoToHub) {
+                  confirmNavigation(onGoToHub);
+                }
+              }}
               className="flex items-center gap-2.5 hover:opacity-90 transition-opacity text-left cursor-pointer shrink-0"
               title="Return to Main Hub"
             >
@@ -89,8 +95,10 @@ export const Header: React.FC<{
                         <button
                           key={s.space_id}
                           onClick={() => {
-                            switchSpace(s.space_id);
-                            setSpaceDropdownOpen(false);
+                            confirmNavigation(() => {
+                              switchSpace(s.space_id);
+                              setSpaceDropdownOpen(false);
+                            });
                           }}
                           className={`w-full text-left px-2.5 py-1.5 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                             isCurrent
@@ -115,12 +123,14 @@ export const Header: React.FC<{
                     <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
                     <button
                       onClick={() => {
-                        setSpaceDropdownOpen(false);
-                        if (onOpenCreateSpace) {
-                          onOpenCreateSpace();
-                        } else {
-                          onOpenSpaceManager();
-                        }
+                        confirmNavigation(() => {
+                          setSpaceDropdownOpen(false);
+                          if (onOpenCreateSpace) {
+                            onOpenCreateSpace();
+                          } else {
+                            onOpenSpaceManager();
+                          }
+                        });
                       }}
                       className="w-full text-left px-2.5 py-1.5 text-xs text-lad-600 dark:text-lad-400 hover:bg-lad-50 dark:hover:bg-lad-950/30 rounded-lg font-medium flex items-center gap-1.5 cursor-pointer"
                     >

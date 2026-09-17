@@ -83,6 +83,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
       rawText: inputText,
       title: title.trim() || inputText.trim(),
       domain,
+      cardTypeId: inferred?.cardTypeId,
       priority,
       dueDate: dueDate || undefined,
       assignedTo: assignedTo || undefined,
@@ -93,6 +94,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
       extractedActions: inferred?.extractedActions || [],
       extractedEntities: inferred?.extractedEntities || [],
       suggestedAttributes: inferred?.suggestedAttributes || {},
+      fieldValues: inferred?.fieldValues || {},
     };
 
     await createObjectFromCapture(finalStructure);

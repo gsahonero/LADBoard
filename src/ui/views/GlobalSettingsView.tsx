@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { useNavigationGuard } from '../context/NavigationGuardContext';
 import { DEFAULT_GDRIVE_CLIENT_ID } from '../../core/standard/constants';
 import { PaletteManager, PaletteId } from '../../core/theme/palette-manager';
 import { CognitivePalettePicker } from '../components/CognitivePalettePicker';
@@ -88,18 +89,25 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
     );
   }, [userRegistry, displayName, threshold, activeInterval, currentPalette, locale]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
+  const { registerGuard, unregisterGuard } = useNavigationGuard();
 
-  const handleSaveSettings = async () => {
+  const handleResetFields = useCallback(() => {
+    if (!userRegistry) return;
+    const origName = userRegistry.identities?.[0]?.display_name || 'Owner';
+    const origThreshold = (userRegistry.preferences.change_commit_threshold_ms || 5000) / 1000;
+    const origInterval = (userRegistry.preferences.active_evaluation_interval_ms || 30000) / 1000;
+    const origPalette = (userRegistry.preferences.palette_theme as PaletteId) || 'calm_focus';
+    const origLocale = userRegistry.preferences.locale || 'en';
+
+    setDisplayName(origName);
+    setThreshold(origThreshold);
+    setActiveInterval(origInterval);
+    setCurrentPalette(origPalette);
+    setLocale(origLocale);
+    PaletteManager.applyPalette(origPalette);
+  }, [userRegistry, setLocale]);
+
+  const handleSaveSettings = useCallback(async () => {
     setIsSaving(true);
     if (displayName.trim()) {
       await updateProfile(displayName.trim());
@@ -113,7 +121,31 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
     setIsSaving(false);
     setSuccessMsg(t('settings.savedSuccess'));
     setTimeout(() => setSuccessMsg(''), 3000);
-  };
+  }, [displayName, locale, threshold, activeInterval, currentPalette, updateProfile, updatePreferences, t]);
+
+  useEffect(() => {
+    registerGuard({
+      id: 'global_settings',
+      isDirty: hasChanges,
+      save: handleSaveSettings,
+      discard: handleResetFields,
+      description: 'Global Settings',
+    });
+    return () => {
+      unregisterGuard('global_settings');
+    };
+  }, [registerGuard, unregisterGuard, hasChanges, handleSaveSettings, handleResetFields]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const handleConnectGoogle = async () => {
     setIsConnectingGoogle(true);

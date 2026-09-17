@@ -11,6 +11,7 @@ import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADContext } from '../ui/context/LADContext';
 import { LADObject } from '../core/standard/types';
 import { CaptureParser } from '../core/objects/capture-parser';
+import { LADCardTypeDefinition } from '../core/schemas/card-types';
 
 describe('Card & Capture UI Automated Test Suite', () => {
   it('displays real-time live token badges in SmartCaptureBar as user types Bank query', async () => {
@@ -780,6 +781,7 @@ describe('Card & Capture UI Automated Test Suite', () => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       version: 1,
+      attributes: {},
     };
 
     const mockContext: any = {
@@ -819,5 +821,127 @@ describe('Card & Capture UI Automated Test Suite', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
     });
+  });
+
+  it('correctly parses, infers, and renders custom card type with only dropdown and currency fields without radio button appearance', async () => {
+    const registry = SchemaRegistry.getInstance();
+
+    // Register a custom card type with ONLY a dropdown (select) and currency fields (no title field)
+    const customDonationCardType: LADCardTypeDefinition = {
+      id: 'custom.finances.donation_tier',
+      category: 'finances',
+      name: 'Donation Tier',
+      description: 'Tracks donor tier and contribution amount',
+      isDefault: false,
+      fields: [
+        {
+          key: 'donor_level',
+          label: 'Donor Level',
+          type: 'select',
+          required: true,
+          options: ['Bronze Tier', 'Silver Tier', 'Gold Benefactor', 'Corporate Patron'],
+        },
+        {
+          key: 'contribution_amount',
+          label: 'Contribution Amount',
+          type: 'currency',
+          required: true,
+        },
+      ],
+      nlp: {
+        keywords: ['donation', 'donor', 'contribution', 'benefactor'],
+      },
+    };
+
+    registry.addCustomCardType(customDonationCardType);
+
+    // 1. Verify CaptureParser accurately detects the custom card type and fills slots
+    const parsed = CaptureParser.parse('Corporate Patron contribution $2,500', new Date(), registry);
+
+    expect(parsed.domain).toBe('finances');
+    expect(parsed.cardTypeId).toBe('custom.finances.donation_tier');
+    expect(parsed.fieldValues!.donor_level).toBe('Corporate Patron');
+    expect(parsed.fieldValues!.contribution_amount).toBe(2500);
+    expect(parsed.title).toBe('Donation Tier: Corporate Patron ($2,500)');
+
+    // 2. Verify ObjectCard renders the custom card type with its dynamic fields and without a radio button
+    const customCardObj: LADObject = {
+      object_id: 'obj_custom_donation_1',
+      space_id: 'spc_test',
+      title: parsed.title,
+      domain: 'finances',
+      tags: [],
+      priority: 'medium',
+      status: 'active',
+      created_by: 'usr_1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+      attributes: {
+        card_type: 'custom.finances.donation_tier',
+        donor_level: 'Corporate Patron',
+        contribution_amount: 2500,
+      },
+    };
+
+    const mockLADContext: any = {
+      updateObject: vi.fn(),
+      deleteObject: vi.fn(),
+    };
+
+    const { unmount } = render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockLADContext}>
+          <ObjectCard obj={customCardObj} />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Check card type badge is rendered
+    expect(screen.getByText('Donation Tier')).toBeInTheDocument();
+
+    // Check dynamic fields are rendered with their formatted values
+    expect(screen.getByText('Donor Level')).toBeInTheDocument();
+    expect(screen.getByText('Corporate Patron')).toBeInTheDocument();
+    expect(screen.getByText('Contribution Amount')).toBeInTheDocument();
+    expect(screen.getByText('$2,500')).toBeInTheDocument();
+
+    // Verify it is NOT rendering the fallback radio button (<Circle />)
+    // There should be NO role or button that has circle / radio toggle
+    expect(screen.queryByRole('button', { name: /restore/i })).not.toBeInTheDocument();
+
+    unmount();
+
+    // 3. Verify general fallback card uses square checkbox instead of circle radio button
+    const generalTaskObj: LADObject = {
+      object_id: 'obj_general_task',
+      space_id: 'spc_test',
+      title: 'Simple Checkbox Task',
+      domain: 'general',
+      tags: [],
+      priority: 'low',
+      status: 'active',
+      created_by: 'usr_1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+      attributes: {},
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockLADContext}>
+          <ObjectCard obj={generalTaskObj} />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Verify title is rendered
+    expect(screen.getByText('Simple Checkbox Task')).toBeInTheDocument();
+    // Verify toggle button exists and contains square icon class (lucide-square)
+    const toggleButton = screen.getByText('Simple Checkbox Task').closest('div')?.parentElement?.querySelector('button');
+    expect(toggleButton).toBeTruthy();
+    expect(toggleButton?.querySelector('.lucide-square')).toBeTruthy();
+    expect(toggleButton?.querySelector('.lucide-circle')).toBeNull();
   });
 });

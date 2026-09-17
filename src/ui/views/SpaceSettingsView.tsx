@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { useNavigationGuard } from '../context/NavigationGuardContext';
 import { ModernIcon, ModernIconName } from '../components/ModernIcon';
 import { deriveCalendarEvents, generateIcsContent, downloadIcsFile } from '../../core/calendar/calendar-sync';
 import { resolveSpaceIcon, SPACE_COLOR_PRESETS, SpaceColorOption } from '../../core/theme/space-identity';
@@ -169,6 +170,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     const calModeChanged = calendarMode !== (activeManifest.settings?.calendar?.mode ?? 'dedicated');
     const inviteMethodChanged = inviteMethod !== (activeManifest.settings?.invitations?.default_method ?? 'gmail');
     const defaultRoleChanged = defaultRole !== (activeManifest.settings?.invitations?.default_role ?? 'editor');
+    const autoArchiveChanged = Number(autoArchiveDays) !== (activeManifest.settings?.auto_archive_days ?? 7);
 
     return (
       nameChanged ||
@@ -179,7 +181,8 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
       calEnabledChanged ||
       calModeChanged ||
       inviteMethodChanged ||
-      defaultRoleChanged
+      defaultRoleChanged ||
+      autoArchiveChanged
     );
   }, [
     activeManifest,
@@ -192,22 +195,28 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     calendarMode,
     inviteMethod,
     defaultRole,
+    autoArchiveDays,
   ]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
+  const { registerGuard, unregisterGuard } = useNavigationGuard();
+
+  const handleResetFields = useCallback(() => {
+    if (!activeManifest) return;
+    setSpaceName(activeManifest.space_name || '');
+    setIcon(activeManifest.icon || 'folder');
+    setColor(activeManifest.color || 'blue');
+    setDescription(activeManifest.description || '');
+    setCategories(activeManifest.categories || []);
+    setAutoArchiveDays(activeManifest.settings?.auto_archive_days ?? 7);
+    setCalendarEnabled(activeManifest.settings?.calendar?.enabled ?? false);
+    setCalendarMode(activeManifest.settings?.calendar?.mode ?? 'dedicated');
+    setInviteMethod(activeManifest.settings?.invitations?.default_method ?? 'gmail');
+    setDefaultRole(activeManifest.settings?.invitations?.default_role ?? 'editor');
+  }, [activeManifest]);
 
   const auth = authService.getState();
 
-  const handleSaveIdentity = async () => {
+  const handleSaveIdentity = useCallback(async () => {
     if (!activeManifest) return;
     setIsSaving(true);
     await updateSpaceIdentity(activeManifest.space_id, {
@@ -234,7 +243,52 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     setIsSaving(false);
     setSuccessMsg(t('spaceSettings.savedSuccess'));
     setTimeout(() => setSuccessMsg(''), 3500);
-  };
+  }, [
+    activeManifest,
+    spaceName,
+    icon,
+    color,
+    description,
+    categories,
+    autoArchiveDays,
+    calendarEnabled,
+    calendarMode,
+    inviteMethod,
+    defaultRole,
+    updateSpaceIdentity,
+    t,
+  ]);
+
+  useEffect(() => {
+    registerGuard({
+      id: 'space_settings',
+      isDirty: hasChanges,
+      save: handleSaveIdentity,
+      discard: handleResetFields,
+      description: `${activeManifest?.space_name || 'Space'} Settings`,
+    });
+    return () => {
+      unregisterGuard('space_settings');
+    };
+  }, [
+    registerGuard,
+    unregisterGuard,
+    hasChanges,
+    handleSaveIdentity,
+    handleResetFields,
+    activeManifest?.space_name,
+  ]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const handleExportIcs = () => {
     const icsString = generateIcsContent(

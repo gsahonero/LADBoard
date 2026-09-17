@@ -22,6 +22,8 @@ import { PeopleView } from './views/PeopleView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { CreateSpaceView } from './views/CreateSpaceView';
+import { NavigationGuardProvider, useNavigationGuard } from './context/NavigationGuardContext';
+import { UnsavedChangesModal } from './components/UnsavedChangesModal';
 import { SyncFallbackBanner } from './components/SyncFallbackBanner';
 import { LADLogo } from './components/LADLogo';
 
@@ -55,6 +57,7 @@ const pageVariants: Variants = {
 
 const AppContent: React.FC = () => {
   const { activeAlerts, proposals, isLoading, userRegistry, pendingJoinSpaceId } = useLAD();
+  const { confirmNavigation } = useNavigationGuard();
   const [activeTab, setActiveTab] = useState<ActiveTab>('hub');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('health');
   const [captureModalOpen, setCaptureModalOpen] = useState(false);
@@ -90,9 +93,15 @@ const AppContent: React.FC = () => {
     setCaptureModalOpen(true);
   };
 
+  const handleSelectTab = (tab: ActiveTab) => {
+    confirmNavigation(() => setActiveTab(tab));
+  };
+
   const handleSelectTopic = (topicId: string) => {
-    setSelectedTopicId(topicId);
-    setActiveTab('topic');
+    confirmNavigation(() => {
+      setSelectedTopicId(topicId);
+      setActiveTab('topic');
+    });
   };
 
   if (isLoading) {
@@ -159,7 +168,7 @@ const AppContent: React.FC = () => {
           >
             <CreateSpaceView
               onComplete={() => setActiveTab('board')}
-              onCancel={() => setActiveTab('hub')}
+              onCancel={() => confirmNavigation(() => setActiveTab('hub'))}
             />
           </motion.div>
         ) : isFullPageHub ? (
@@ -172,12 +181,12 @@ const AppContent: React.FC = () => {
             className="w-full flex-1 relative z-10"
           >
             <HubLandingView
-              onOpenHomeDashboard={() => setActiveTab('board')}
+              onOpenHomeDashboard={() => confirmNavigation(() => setActiveTab('board'))}
               onSelectTopic={handleSelectTopic}
               onOpenCapture={() => handleOpenCapture()}
               onOpenSpaceManager={() => setSpaceModalOpen(true)}
-              onOpenCreateSpace={() => setActiveTab('create_space')}
-              onOpenSettings={() => setActiveTab('global_settings')}
+              onOpenCreateSpace={() => confirmNavigation(() => setActiveTab('create_space'))}
+              onOpenSettings={() => confirmNavigation(() => setActiveTab('global_settings'))}
             />
           </motion.div>
         ) : (
@@ -193,16 +202,16 @@ const AppContent: React.FC = () => {
             <Header
               onOpenCapture={() => handleOpenCapture(activeTab === 'topic' ? selectedTopicId : undefined)}
               onOpenSpaceManager={() => setSpaceModalOpen(true)}
-              onOpenCreateSpace={() => setActiveTab('create_space')}
-              onOpenSettings={() => setActiveTab('settings')}
-              onGoToHub={() => setActiveTab('hub')}
+              onOpenCreateSpace={() => confirmNavigation(() => setActiveTab('create_space'))}
+              onOpenSettings={() => confirmNavigation(() => setActiveTab('settings'))}
+              onGoToHub={() => confirmNavigation(() => setActiveTab('hub'))}
             />
 
             <div className="flex-1 flex max-w-7xl w-full mx-auto">
               {/* Responsive Navigation Sidebar */}
               <Navigation
                 activeTab={activeTab}
-                onSelectTab={setActiveTab}
+                onSelectTab={handleSelectTab}
                 attentionCount={attentionCount}
               />
 
@@ -220,7 +229,7 @@ const AppContent: React.FC = () => {
                     {activeTab === 'topic' && (
                       <TopicDashboardView
                         topicId={selectedTopicId}
-                        onBackToHub={() => setActiveTab('hub')}
+                        onBackToHub={() => confirmNavigation(() => setActiveTab('hub'))}
                         onOpenCapture={(dom) => handleOpenCapture(dom || selectedTopicId)}
                       />
                     )}
@@ -254,7 +263,7 @@ const AppContent: React.FC = () => {
       <SpaceManagerModal
         isOpen={spaceModalOpen}
         onClose={() => setSpaceModalOpen(false)}
-        onOpenCreateSpace={() => setActiveTab('create_space')}
+        onOpenCreateSpace={() => confirmNavigation(() => setActiveTab('create_space'))}
       />
 
       {/* Join Space Modal (opens when URL has ?join=spc_... or pending invite) */}
@@ -267,7 +276,10 @@ export const App: React.FC = () => {
   return (
     <I18nProvider>
       <LADProvider>
-        <AppContent />
+        <NavigationGuardProvider>
+          <AppContent />
+          <UnsavedChangesModal />
+        </NavigationGuardProvider>
       </LADProvider>
     </I18nProvider>
   );

@@ -254,43 +254,66 @@ export const SmartCaptureBar: React.FC = () => {
             )}
 
             {/* Extracted Slot Pills */}
-            {fieldOverrides.bank && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-medium border border-emerald-200 dark:border-emerald-800">
-                <span>Bank: {fieldOverrides.bank}</span>
-              </span>
-            )}
+            {activeCardType &&
+              activeCardType.fields.map((field) => {
+                if (field.key === 'title') return null;
+                const val = fieldOverrides[field.key];
+                if (val === undefined || val === '' || val === null) return null;
 
-            {fieldOverrides.account_type && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium">
-                <span className="capitalize">{fieldOverrides.account_type}</span>
-              </span>
-            )}
+                if (field.key === 'bank') {
+                  return (
+                    <span
+                      key={field.key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-medium border border-emerald-200 dark:border-emerald-800"
+                    >
+                      <span>Bank: {val}</span>
+                    </span>
+                  );
+                }
 
-            {fieldOverrides.balance !== undefined && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs">
-                <span>${Number(fieldOverrides.balance).toLocaleString()}</span>
-              </span>
-            )}
+                if (field.type === 'currency') {
+                  return (
+                    <span
+                      key={field.key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs"
+                    >
+                      <span>${Number(val).toLocaleString()}</span>
+                    </span>
+                  );
+                }
 
-            {fieldOverrides.specialty && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium border border-rose-200 dark:border-rose-800">
-                <span>{fieldOverrides.specialty}</span>
-              </span>
-            )}
+                if (field.type === 'select') {
+                  return (
+                    <span
+                      key={field.key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-medium border border-indigo-200 dark:border-indigo-800"
+                    >
+                      <span>{val}</span>
+                    </span>
+                  );
+                }
 
-            {fieldOverrides.patient && fieldOverrides.patient !== 'Me' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-medium border border-purple-200 dark:border-purple-800">
-                <User className="w-3 h-3" />
-                <span>{fieldOverrides.patient}</span>
-              </span>
-            )}
+                if (field.type === 'checklist' && Array.isArray(val) && val.length > 0) {
+                  return (
+                    <span
+                      key={field.key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-medium border border-amber-200 dark:border-amber-800"
+                    >
+                      <CheckSquare className="w-3 h-3" />
+                      <span>{val.length} items</span>
+                    </span>
+                  );
+                }
 
-            {fieldOverrides.checklist && fieldOverrides.checklist.length > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-medium border border-amber-200 dark:border-amber-800">
-                <CheckSquare className="w-3 h-3" />
-                <span>{fieldOverrides.checklist.length} items</span>
-              </span>
-            )}
+                return (
+                  <span
+                    key={field.key}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium"
+                  >
+                    <span>{field.label}: {String(val)}</span>
+                  </span>
+                );
+              })}
 
             {fieldOverrides.needs_followup && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium border border-blue-200 dark:border-blue-800">

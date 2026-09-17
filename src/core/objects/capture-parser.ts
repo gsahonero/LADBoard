@@ -100,7 +100,7 @@ export class CaptureParser {
       }
     }
 
-    // Check registered card types across categories for keywords
+    // Check registered card types across categories for keywords, name, and field options
     const cardTypes = registry.getAllCardTypes();
     for (const ct of cardTypes) {
       if (ct.nlp?.keywords) {
@@ -108,6 +108,24 @@ export class CaptureParser {
           const regex = new RegExp(`\\b${kw}\\b`, 'i');
           if (regex.test(lower)) {
             return ct.category;
+          }
+        }
+      }
+      if (ct.name) {
+        const nameRegex = new RegExp(`\\b${ct.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (nameRegex.test(lower)) {
+          return ct.category;
+        }
+      }
+      if (ct.fields) {
+        for (const field of ct.fields) {
+          if (field.type === 'select' && field.options) {
+            for (const opt of field.options) {
+              const optRegex = new RegExp(`\\b${opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+              if (optRegex.test(lower)) {
+                return ct.category;
+              }
+            }
           }
         }
       }
@@ -186,21 +204,61 @@ export class CaptureParser {
     if (candidates.length === 1) return candidates[0];
 
     const lower = text.toLowerCase();
+    const hasCurrencyInText = /(?:\$|usd|€|eur|\bdollars?\b|\bdólares\b|\bpesos\b)/i.test(lower);
 
-    // Score candidates based on keyword matches
+    // Score candidates based on keyword matches, name matches, and field option matches
     let bestCandidate: LADCardTypeDefinition | undefined = undefined;
     let maxScore = 0;
 
     for (const ct of candidates) {
       let score = 0;
+
+      // 1. NLP Keywords match
       if (ct.nlp?.keywords) {
         for (const kw of ct.nlp.keywords) {
           const regex = new RegExp(`\\b${kw}\\b`, 'i');
           if (regex.test(lower)) {
-            score++;
+            score += 2;
           }
         }
       }
+
+      // 2. Card Type Name match
+      if (ct.name) {
+        const nameRegex = new RegExp(`\\b${ct.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (nameRegex.test(lower)) {
+          score += 3;
+        }
+      }
+
+      // 3. Select field options matching
+      if (ct.fields) {
+        for (const field of ct.fields) {
+          if (field.type === 'select' && field.options) {
+            for (const opt of field.options) {
+              const optRegex = new RegExp(`\\b${opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+              if (optRegex.test(lower)) {
+                score += 3;
+                break;
+              }
+            }
+          }
+
+          // 4. Currency field matching with currency in text
+          if (field.type === 'currency' && hasCurrencyInText) {
+            score += 2;
+          }
+
+          // 5. Field label match
+          if (field.label && field.label.length > 2) {
+            const labelRegex = new RegExp(`\\b${field.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            if (labelRegex.test(lower)) {
+              score += 1;
+            }
+          }
+        }
+      }
+
       if (score > maxScore) {
         maxScore = score;
         bestCandidate = ct;
@@ -380,9 +438,10 @@ export class CaptureParser {
       }
     }
 
-    // Match select field options (including multi-word phrases with spaces) for any card type
+    // Dynamic slot filling for all schema fields defined on the card type
     if (cardType?.fields) {
       for (const field of cardType.fields) {
+        // 1. Select field options (including multi-word phrases with spaces)
         if (field.type === 'select' && field.options && !values[field.key]) {
           const sortedOptions = [...field.options].sort((a, b) => b.length - a.length);
           for (const opt of sortedOptions) {
@@ -393,6 +452,45 @@ export class CaptureParser {
               break;
             }
           }
+        }
+
+        // 2. Currency field extraction: matches "$50", "50 dollars", "50 usd", "cost is $50", etc.
+        if (field.type === 'currency' && values[field.key] === undefined) {
+          const currencyMatch =
+            raw.match(/(?:\$|usd|€|eur)\s*([\d,]+(?:\.\d+)?)/i) ||
+            raw.match(/([\d,]+(?:\.\d+)?)\s*(?:dollars?|dólares|usd|€|eur)/i) ||
+            raw.match(/(?:amount|cost|price|balance|budget|fee|total|pago|monto|precio|saldo)(?:\s+(?:is|es|de|of))?\s*\$?([\d,]+(?:\.\d+)?)/i);
+          if (currencyMatch) {
+            const numStr = (currencyMatch[1] || '').replace(/,/g, '');
+            const val = parseFloat(numStr);
+            if (!isNaN(val)) {
+              values[field.key] = val;
+            }
+          }
+        }
+
+        // 3. Number field extraction
+        if (field.type === 'number' && values[field.key] === undefined) {
+          const numMatch = raw.match(/\b\d+(?:\.\d+)?\b/);
+          if (numMatch) {
+            const val = parseFloat(numMatch[0]);
+            if (!isNaN(val)) {
+              values[field.key] = val;
+            }
+          }
+        }
+
+        // 4. Date field extraction
+        if (field.type === 'date' && values[field.key] === undefined) {
+          const dateVal = this.detectDueDate(raw, refDate);
+          if (dateVal) {
+            values[field.key] = dateVal;
+          }
+        }
+
+        // 5. Person field extraction
+        if (field.type === 'person' && values[field.key] === undefined && detectedAssignee) {
+          values[field.key] = detectedAssignee;
         }
       }
     }
@@ -581,6 +679,27 @@ export class CaptureParser {
     if (cardType?.id === 'health.medical_appointment' && fields?.specialty) {
       const patientSuffix = fields.patient && fields.patient !== 'Me' ? ` (${fields.patient})` : '';
       return `${fields.specialty} Appointment${patientSuffix}`;
+    }
+
+    // If explicit title field is populated
+    if (fields?.title) {
+      return fields.title;
+    }
+
+    // If custom card type without title field has select and/or currency values
+    if (cardType && !cardType.isDefault && fields) {
+      const selectField = cardType.fields.find((f) => f.type === 'select');
+      const selectVal = selectField ? fields[selectField.key] : undefined;
+      const currencyField = cardType.fields.find((f) => f.type === 'currency');
+      const currencyVal = currencyField ? fields[currencyField.key] : undefined;
+
+      if (selectVal && currencyVal !== undefined) {
+        return `${cardType.name}: ${selectVal} ($${Number(currencyVal).toLocaleString('en-US')})`;
+      } else if (selectVal) {
+        return `${cardType.name}: ${selectVal}`;
+      } else if (currencyVal !== undefined) {
+        return `${cardType.name} ($${Number(currencyVal).toLocaleString('en-US')})`;
+      }
     }
 
     // If the text is short enough, use it
