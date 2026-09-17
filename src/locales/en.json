@@ -162,6 +162,10 @@
     "nameLabel": "Name",
     "inviteUser": "Invite a Person",
     "invitationSent": "Invitation sent successfully!",
+    "noRegisteredEmail": "No registered email",
+    "reinvite": "Reinvite",
+    "reinviting": "Sending...",
+    "reinviteSuccess": "Invitation resent to {email}!",
     "acceptInvitation": "Accept",
     "declineInvitation": "Decline"
   },

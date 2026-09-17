@@ -40,6 +40,11 @@ export class UserRegistryManager {
         if (!existing.preferences.gdrive_client_id && DEFAULT_GDRIVE_CLIENT_ID) {
           existing.preferences.gdrive_client_id = DEFAULT_GDRIVE_CLIENT_ID;
         }
+        // Sanitize legacy placeholder email if present
+        if (existing.identities[0]?.email === 'user@ladboard.local') {
+          existing.identities[0].email = email || undefined;
+          await this.storage.writeFile(this.registryPath, existing);
+        }
         this.registry = existing;
         return existing;
       } catch (err) {
@@ -58,7 +63,7 @@ export class UserRegistryManager {
       identities: [
         {
           provider,
-          email: email || 'user@ladboard.local',
+          email: email || undefined,
           subject_id: `sub_${userId}`,
           display_name: email ? email.split('@')[0] : 'LAD User',
         },

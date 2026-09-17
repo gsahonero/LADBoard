@@ -182,13 +182,17 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
 
+      const effectiveEmail =
+        (auth.isAuthenticated && auth.user?.email) ||
+        (registry.identities[0]?.email !== 'user@ladboard.local' ? registry.identities[0]?.email : undefined);
+
       const loaded = await spManager.loadSpace(
         initialSpaceId,
         registry.user_id,
         registry.preferences.change_commit_threshold_ms,
         initialSpaceName,
-        registry.identities[0]?.display_name,
-        registry.identities[0]?.email
+        registry.identities[0]?.display_name || auth.user?.name,
+        effectiveEmail
       );
 
       if (storageManager.getRemoteProvider()) {
@@ -755,6 +759,18 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setUserRegistry({ ...userRegistryManager.getRegistry()! });
           }
           if (activeSpace) {
+            const currentOwnerId = userRegistry?.user_id || 'usr_owner';
+            await activeSpace.graphStore.ensureNodeForEntity(
+              currentOwnerId,
+              'user',
+              user.name || 'Owner',
+              {
+                name: user.name || 'Owner',
+                email: user.email,
+                role: 'owner',
+                status: 'active',
+              }
+            );
             await activeSpace.syncCoordinator.triggerSync();
           }
           refreshSpaceState();

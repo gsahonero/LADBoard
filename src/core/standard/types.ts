@@ -4,7 +4,7 @@
 
 export interface LADUserIdentity {
   provider: 'google' | 'local' | 'oidc';
-  email: string;
+  email?: string;
   subject_id: string;
   display_name?: string;
   avatar_url?: string;

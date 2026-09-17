@@ -5,16 +5,18 @@
 import React, { useState } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
-import { Users, UserPlus, Check, Mail, Shield, Crown } from 'lucide-react';
+import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const PeopleView: React.FC = () => {
-  const { nodes, inviteMember, userRegistry } = useLAD();
+  const { nodes, inviteMember, userRegistry, authService } = useLAD();
   const { t } = useI18n();
+  const auth = authService.getState();
 
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'owner' | 'editor' | 'viewer'>('editor');
+  const [reinvitingId, setReinvitingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   const userNodes = nodes.filter((n) => n.type === 'user');
@@ -25,7 +27,26 @@ export const PeopleView: React.FC = () => {
     setInviteName('');
     setInviteEmail('');
     setSuccessMsg(t('peopleView.invitationSent'));
-    setTimeout(() => setSuccessMsg(''), 2500);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleReinvite = async (
+    email: string,
+    role: 'owner' | 'editor' | 'viewer' = 'editor',
+    name?: string,
+    nodeId?: string
+  ) => {
+    if (!email || !email.trim()) return;
+    if (nodeId) setReinvitingId(nodeId);
+    try {
+      await inviteMember(email.trim(), role, name?.trim() || undefined);
+      setSuccessMsg(t('peopleView.reinviteSuccess', { email: email.trim() }));
+      setTimeout(() => setSuccessMsg(''), 3500);
+    } catch (err) {
+      console.error('Failed to reinvite member:', err);
+    } finally {
+      setReinvitingId(null);
+    }
   };
 
   return (
@@ -124,14 +145,18 @@ export const PeopleView: React.FC = () => {
             const role = user.metadata?.role || 'member';
             const isInvited = user.metadata?.status === 'invited';
 
-            // Resolve real user display name
-            let userName = user.metadata?.name || user.label;
-            if (
+            const isCurrentUser =
               user.node_id === `node_${userRegistry?.user_id}` ||
               user.node_id === userRegistry?.user_id ||
-              role === 'owner'
-            ) {
-              if (
+              user.ref_id === userRegistry?.user_id ||
+              role === 'owner';
+
+            // Resolve real user display name
+            let userName = user.metadata?.name || user.label;
+            if (isCurrentUser) {
+              if (auth.isAuthenticated && auth.user?.name) {
+                userName = auth.user.name;
+              } else if (
                 userRegistry?.identities[0]?.display_name &&
                 (userName === 'Current User' || userName === 'Owner' || !userName)
               ) {
@@ -139,10 +164,29 @@ export const PeopleView: React.FC = () => {
               }
             }
 
-            const userEmail =
-              user.metadata?.email ||
-              (user.label.includes('@') ? user.label : undefined) ||
-              (role === 'owner' ? userRegistry?.identities[0]?.email : undefined);
+            // Resolve user email
+            let userEmail: string | undefined;
+            if (isCurrentUser) {
+              if (auth.isAuthenticated && auth.user?.email) {
+                userEmail = auth.user.email;
+              } else if (
+                userRegistry?.identities[0]?.email &&
+                userRegistry.identities[0].email !== 'user@ladboard.local'
+              ) {
+                userEmail = userRegistry.identities[0].email;
+              } else if (user.metadata?.email && user.metadata.email !== 'user@ladboard.local') {
+                userEmail = user.metadata.email;
+              }
+            } else {
+              if (user.metadata?.email && user.metadata.email !== 'user@ladboard.local') {
+                userEmail = user.metadata.email;
+              } else if (user.label.includes('@') && !user.label.endsWith('@ladboard.local')) {
+                userEmail = user.label;
+              }
+            }
+
+            const displayEmail = userEmail || t('peopleView.noRegisteredEmail');
+            const hasEmail = Boolean(userEmail);
 
             const initials = (userName || 'U')
               .split(' ')
@@ -171,18 +215,28 @@ export const PeopleView: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    {userEmail && (
-                      <div className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5">
-                        <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="truncate">{userEmail}</span>
-                      </div>
-                    )}
+                    <div className="text-xs truncate flex items-center gap-1.5">
+                      <Mail
+                        className={`w-3 h-3 shrink-0 ${
+                          hasEmail ? 'text-slate-400' : 'text-slate-300 dark:text-slate-600'
+                        }`}
+                      />
+                      <span
+                        className={
+                          hasEmail
+                            ? 'truncate text-slate-500 dark:text-slate-400 font-medium'
+                            : 'italic text-slate-400 dark:text-slate-500'
+                        }
+                      >
+                        {displayEmail}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {isInvited ? (
-                    <span className="text-[11px] bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-xl font-semibold">
+                    <span className="text-[11px] bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80 px-2.5 py-1 rounded-xl font-semibold">
                       Invited
                     </span>
                   ) : (
@@ -192,6 +246,28 @@ export const PeopleView: React.FC = () => {
                         {role === 'editor' ? t('peopleView.roleEditor') : t('peopleView.roleViewer')}
                       </span>
                     )
+                  )}
+
+                  {/* Reinvite Button for invited members or non-owner collaborators with email */}
+                  {!isCurrentUser && userEmail && (
+                    <button
+                      type="button"
+                      onClick={() => handleReinvite(userEmail, role as any, userName, user.node_id)}
+                      disabled={reinvitingId === user.node_id}
+                      title={t('peopleView.reinvite')}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/80 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${
+                          reinvitingId === user.node_id ? 'animate-spin text-blue-500' : ''
+                        }`}
+                      />
+                      <span className="hidden sm:inline">
+                        {reinvitingId === user.node_id
+                          ? t('peopleView.reinviting')
+                          : t('peopleView.reinvite')}
+                      </span>
+                    </button>
                   )}
                 </div>
               </div>

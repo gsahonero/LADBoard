@@ -285,40 +285,30 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
               <div className="absolute -right-12 -bottom-12 w-60 h-60 bg-white/10 rounded-full blur-3xl pointer-events-none animate-calm-glow" />
 
               <div className="space-y-4 relative z-10">
-                {/* Header: Space Identity & In-Card Space Navigation Controls — Wrapped Cleanly on Narrow Screens */}
-                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                {/* Header: Space Icon + Status on left, Carousel Switcher on right */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <motion.div
                       key={`icon_box_${activeSpaceId}`}
                       initial={{ scale: 0.9, opacity: 0.7 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ duration: 0.25 }}
-                      className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-inner shrink-0"
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-inner shrink-0"
                     >
-                      <ModernIcon name={activeIcon} className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                      <ModernIcon name={activeIcon} className="w-5 h-5 text-white" />
                     </motion.div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <motion.h2
-                          key={`name_${activeSpaceId}`}
-                          initial={{ opacity: 0.7, x: -3 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.25 }}
-                          className="text-lg sm:text-2xl font-black tracking-tight text-white leading-tight truncate max-w-[200px] xs:max-w-none"
-                        >
-                          {spaceName}
-                        </motion.h2>
-                        <span
-                          style={{ backgroundColor: activeColorCfg.hex }}
-                          className="w-2 h-2 rounded-full animate-pulse shrink-0"
-                        />
-                      </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] font-semibold text-white/90 shrink-0">
+                      <span
+                        style={{ backgroundColor: activeColorCfg.hex }}
+                        className="w-2 h-2 rounded-full animate-pulse shrink-0"
+                      />
+                      <span>{spaces.length > 1 ? `${currentSpaceIndex + 1} / ${spaces.length}` : t('spaces.currentSpace')}</span>
                     </div>
                   </div>
 
                   {/* Carousel Left/Right Space Switcher & Add Space */}
                   <div
-                    className="flex items-center gap-1 p-1 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 self-start xs:self-auto"
+                    className="flex items-center gap-1 p-1 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-2xl border border-white/10 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {spaces.length > 1 && (
@@ -333,10 +323,6 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
                         >
                           <ChevronLeft className="w-4 h-4 opacity-75 hover:opacity-100" />
                         </motion.button>
-
-                        <span className="text-[11px] font-bold px-1 text-white/75 whitespace-nowrap">
-                          {currentSpaceIndex + 1} / {spaces.length}
-                        </span>
 
                         <motion.button
                           type="button"
@@ -370,6 +356,19 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
                       <Plus className="w-4 h-4 opacity-75 hover:opacity-100" />
                     </motion.button>
                   </div>
+                </div>
+
+                {/* Space Title: Full Width, Naturally Wrapping, Prominent Typography */}
+                <div className="pt-0.5">
+                  <motion.h2
+                    key={`name_${activeSpaceId}`}
+                    initial={{ opacity: 0.7, y: 2 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white leading-tight break-words"
+                  >
+                    {spaceName}
+                  </motion.h2>
                 </div>
 
                 {/* Space Description */}
@@ -521,31 +520,39 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
 
                 {/* Quick Topic Buttons Grid (Jewel Cards) or Empty State */}
                 {activeSpaceCategories.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 pt-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 pt-1">
                     {activeSpaceCategories.map((catId) => {
                       const catMeta = getCategoryMeta(catId);
                       const topicCount = objects.filter((o) => o.domain === catId).length;
+                      const shortDomainKey = `capture.domains.${catId}`;
+                      const hasShortDomain = ['health', 'finances', 'documents', 'shopping', 'home', 'projects', 'general'].includes(catId.toLowerCase());
+                      const displayLabel = hasShortDomain
+                        ? t(shortDomainKey)
+                        : (catMeta.labelKey ? t(catMeta.labelKey) : (catMeta.label || catId));
+
                       return (
                         <motion.button
                           key={catId}
                           whileHover={{ y: -2, scale: 1.02 }}
                           whileTap={{ scale: 0.96 }}
                           onClick={() => onSelectTopic(catId)}
-                          className={`p-2.5 sm:p-3 rounded-2xl border bg-gradient-to-br ${catMeta.color} transition-all text-left flex flex-col justify-between gap-1.5 shadow-xs cursor-pointer`}
+                          className={`p-2.5 sm:p-3 rounded-2xl border bg-gradient-to-br ${catMeta.color} transition-all text-left flex flex-col justify-between gap-2 shadow-xs cursor-pointer min-h-[72px] sm:min-h-[78px]`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="p-1.5 sm:p-2 rounded-xl bg-white/60 dark:bg-slate-800/60 shadow-xs border border-white/40 dark:border-white/10">
+                          <div className="flex items-center justify-between w-full">
+                            <div className="p-1.5 sm:p-2 rounded-xl bg-white/70 dark:bg-slate-800/70 shadow-xs border border-white/40 dark:border-white/10">
                               <ModernIcon name={catMeta.iconName} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </div>
                             <span
-                              className={`text-[10px] sm:text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${catMeta.badgeBg}`}
+                              className={`text-[10px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-full ${catMeta.badgeBg}`}
                             >
                               {topicCount}
                             </span>
                           </div>
-                          <span className="font-bold text-xs mt-0.5 sm:mt-1 line-clamp-1">
-                            {catMeta.labelKey ? t(catMeta.labelKey) : (catMeta.label || catId)}
-                          </span>
+                          <div className="min-w-0 w-full">
+                            <span className="font-bold text-xs sm:text-[13px] text-slate-900 dark:text-white leading-tight block break-words line-clamp-2">
+                              {displayLabel}
+                            </span>
+                          </div>
                         </motion.button>
                       );
                     })}

@@ -2,7 +2,7 @@
  * Space Manager orchestrating Space Manifests, Folders, and Space Discovery
  */
 
-import { LADSpaceManifest, LADInvitation } from '../standard/types';
+import { LADSpaceManifest, LADInvitation, LADGraphNode } from '../standard/types';
 import { LAD_STANDARD_VERSION } from '../standard/constants';
 import { validateSpaceManifest } from '../standard/validators';
 import { IStorageProvider } from '../storage/provider.interface';
@@ -266,38 +266,71 @@ export class SpaceManager {
       created_at: new Date().toISOString(),
     };
 
-    // Add node for invited user to graph
-    const invitedNode = await space.graphStore.ensureNodeForEntity(
-      `usr_invited_${invId}`,
-      'user',
-      displayName,
-      {
-        invitation_id: invId,
-        name: displayName,
-        email: invitedEmail,
-        status: 'invited',
-        role,
-      }
+    // Find existing node for this email if already invited or registered
+    const existingNode = space.graphStore.getNodes().find(
+      (n) => n.type === 'user' && (n.metadata?.email || '').toLowerCase() === invitedEmail.toLowerCase()
     );
 
-    // Add edge between inviter and invited
-    await space.graphStore.addEdge({
-      edge_id: `edge_inv_${invId}`,
-      source: `node_${invitedByUserId}`,
-      target: invitedNode.node_id,
-      type: 'proposed_membership',
-      metadata: {
-        invitation_id: invId,
-        status: 'invited',
-      },
-      policies: {
-        notification: {
-          modification: true,
+    let invitedNode: LADGraphNode;
+    if (existingNode) {
+      invitedNode = (await space.graphStore.updateNode(existingNode.node_id, {
+        label: displayName,
+        metadata: {
+          ...existingNode.metadata,
+          invitation_id: invId,
+          name: displayName,
+          email: invitedEmail,
+          status: 'invited',
+          role,
         },
-      },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+      })) || existingNode;
+    } else {
+      invitedNode = await space.graphStore.ensureNodeForEntity(
+        `usr_invited_${invId}`,
+        'user',
+        displayName,
+        {
+          invitation_id: invId,
+          name: displayName,
+          email: invitedEmail,
+          status: 'invited',
+          role,
+        }
+      );
+    }
+
+    // Add or update edge between inviter and invited
+    const existingEdge = space.graphStore.getEdges().find(
+      (e) => e.target === invitedNode.node_id && e.type === 'proposed_membership'
+    );
+    if (existingEdge) {
+      await space.graphStore.updateEdge(existingEdge.edge_id, {
+        metadata: {
+          ...existingEdge.metadata,
+          invitation_id: invId,
+          status: 'invited',
+          role,
+        },
+      });
+    } else {
+      await space.graphStore.addEdge({
+        edge_id: `edge_inv_${invId}`,
+        source: `node_${invitedByUserId}`,
+        target: invitedNode.node_id,
+        type: 'proposed_membership',
+        metadata: {
+          invitation_id: invId,
+          status: 'invited',
+        },
+        policies: {
+          notification: {
+            modification: true,
+          },
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     // Commit operation
     await space.changeAggregator.commitImmediate({

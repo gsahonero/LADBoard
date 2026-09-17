@@ -115,4 +115,46 @@ describe('Space Invitation & Strict Identity Verification Flow', () => {
     expect(verification.isValid).toBe(true);
     expect(verification.role).toBe('owner');
   });
+
+  it('supports reinviting a user with updated invitation metadata and graph links', async () => {
+    const storage = new MemoryStorageProvider();
+    const manager = new SpaceManager(storage);
+
+    const manifest = await manager.createSpace({
+      spaceName: 'Collab Space',
+      createdByUserId: 'usr_alice_01',
+    });
+
+    // Initial invite
+    const invite1 = await manager.createInvitation(
+      manifest.space_id,
+      'usr_alice_01',
+      'collab@gmail.com',
+      'viewer',
+      'Collaborator'
+    );
+    expect(invite1.invited_email).toBe('collab@gmail.com');
+    expect(invite1.role).toBe('viewer');
+
+    // Reinvite with updated role / permissions
+    const invite2 = await manager.createInvitation(
+      manifest.space_id,
+      'usr_alice_01',
+      'collab@gmail.com',
+      'editor',
+      'Collaborator Upgraded'
+    );
+    expect(invite2.invited_email).toBe('collab@gmail.com');
+    expect(invite2.role).toBe('editor');
+    expect(invite2.invited_name).toBe('Collaborator Upgraded');
+
+    // Verification resolves the latest invitation state
+    const verification = await validateSpaceAccessAndInvitation(
+      storage,
+      manifest.space_id,
+      'collab@gmail.com'
+    );
+    expect(verification.isValid).toBe(true);
+    expect(verification.role).toBe('editor');
+  });
 });
