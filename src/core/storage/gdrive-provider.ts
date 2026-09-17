@@ -188,11 +188,35 @@ export class GDriveStorageProvider implements IStorageProvider {
       }
 
       if (i === 0 && part.startsWith('spc_')) {
-        // Query for space folder across own LAD and shared folders
-        const qShared = encodeURIComponent(`name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-        const searchSharedRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qShared}&fields=files(id,name,shared,ownedByMe,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
-        const searchSharedData = await searchSharedRes.json();
-        const candidateFiles = searchSharedData.files || [];
+        let candidateFiles: any[] = [];
+
+        // 1. Query own Drive folders
+        try {
+          const qOwn = encodeURIComponent(`name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+          const resOwn = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qOwn}&fields=files(id,name,shared,ownedByMe,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+          const dataOwn = await resOwn.json();
+          if (dataOwn.files && dataOwn.files.length > 0) {
+            candidateFiles.push(...dataOwn.files);
+          }
+        } catch (err) {
+          console.warn('Could not query own drive for space:', err);
+        }
+
+        // 2. Query "Shared with me" folders (crucial for collaborator invitations)
+        try {
+          const qShared = encodeURIComponent(`sharedWithMe = true and name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+          const resShared = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qShared}&fields=files(id,name,shared,ownedByMe,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+          const dataShared = await resShared.json();
+          if (dataShared.files && dataShared.files.length > 0) {
+            for (const file of dataShared.files) {
+              if (!candidateFiles.some((c) => c.id === file.id)) {
+                candidateFiles.push(file);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Could not query sharedWithMe for space:', err);
+        }
 
         if (candidateFiles.length > 0) {
           let selectedFolderId: string | null = null;
@@ -200,7 +224,7 @@ export class GDriveStorageProvider implements IStorageProvider {
           // Priority 1: Candidate folder that contains manifest.json
           for (const candidate of candidateFiles) {
             const qManifest = encodeURIComponent(`name = 'manifest.json' and '${candidate.id}' in parents and trashed = false`);
-            const manifestRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qManifest}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
+            const manifestRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qManifest}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
             const manifestData = await manifestRes.json();
             if (manifestData.files && manifestData.files.length > 0) {
               selectedFolderId = candidate.id;
@@ -256,7 +280,7 @@ export class GDriveStorageProvider implements IStorageProvider {
         }
         // Check inside currentParentId for subfolders
         const q = encodeURIComponent(`name = '${part}' and '${currentParentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-        const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
+        const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
         const searchData = await searchRes.json();
 
         if (searchData.files && searchData.files.length > 0 && searchData.files[0].id) {

@@ -306,6 +306,11 @@ export const JoinSpaceModal: React.FC = () => {
                 <p>
                   {t('joinModal.notFoundDesc')}
                 </p>
+                {verification?.error && verification.error !== 'SPACE_UNAVAILABLE' && verification.error !== 'MANIFEST_NOT_FOUND' && (
+                  <div className="p-2.5 rounded-xl bg-amber-100/70 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[11px] font-mono text-amber-900 dark:text-amber-200 break-all">
+                    {verification.error}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex flex-col gap-2.5">
