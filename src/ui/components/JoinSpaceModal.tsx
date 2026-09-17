@@ -108,6 +108,7 @@ export const JoinSpaceModal: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!pendingJoinSpaceId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         dismissPendingJoinSpace();
@@ -115,7 +116,7 @@ export const JoinSpaceModal: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dismissPendingJoinSpace]);
+  }, [pendingJoinSpaceId, dismissPendingJoinSpace]);
 
   const iconKey = resolveSpaceIcon(
     verification?.manifest?.icon || 'folder',
@@ -124,18 +125,24 @@ export const JoinSpaceModal: React.FC = () => {
 
   return (
     <AnimatePresence>
-      <div 
-        onClick={(e) => {
-          if (e.target === e.currentTarget) dismissPendingJoinSpace();
-        }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in"
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden p-6 sm:p-7 relative"
+      {pendingJoinSpaceId ? (
+        <motion.div 
+          key="join-space-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) dismissPendingJoinSpace();
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
         >
+          <motion.div
+            key="join-space-card"
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden p-6 sm:p-7 relative"
+          >
           <button
             onClick={dismissPendingJoinSpace}
             className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
@@ -332,7 +339,8 @@ export const JoinSpaceModal: React.FC = () => {
             </div>
           )}
         </motion.div>
-      </div>
-    </AnimatePresence>
-  );
+      </motion.div>
+    ) : null}
+  </AnimatePresence>
+);
 };
