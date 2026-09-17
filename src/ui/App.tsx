@@ -61,7 +61,7 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!isLoading && userRegistry) {
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-      const isJoining = Boolean(pendingJoinSpaceId || urlParams?.get('join') || urlParams?.get('space'));
+      const isJoining = Boolean(pendingJoinSpaceId || urlParams?.get('join'));
 
       if (isJoining) {
         setShowOnboarding(false);

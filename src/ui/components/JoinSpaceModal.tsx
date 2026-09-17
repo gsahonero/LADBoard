@@ -107,6 +107,16 @@ export const JoinSpaceModal: React.FC = () => {
     setIsJoining(false);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        dismissPendingJoinSpace();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dismissPendingJoinSpace]);
+
   const iconKey = resolveSpaceIcon(
     verification?.manifest?.icon || 'folder',
     verification?.manifest?.space_name || 'Space'
@@ -114,7 +124,12 @@ export const JoinSpaceModal: React.FC = () => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in">
+      <div 
+        onClick={(e) => {
+          if (e.target === e.currentTarget) dismissPendingJoinSpace();
+        }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in"
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}

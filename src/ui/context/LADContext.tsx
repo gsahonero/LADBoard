@@ -171,7 +171,18 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (typeof window !== 'undefined') {
         try {
           const params = new URLSearchParams(window.location.search);
-          const joinSpaceId = params.get('join') || params.get('space');
+          const joinSpaceId = params.get('join');
+          const spaceParam = params.get('space');
+
+          if (spaceParam && spaceParam.startsWith('spc_')) {
+            const existingRef = registry.spaces.find((s) => s.space_id === spaceParam);
+            if (existingRef) {
+              initialSpaceRef = existingRef;
+              initialSpaceId = existingRef.space_id;
+              initialSpaceName = existingRef.space_name;
+            }
+          }
+
           if (joinSpaceId && joinSpaceId.startsWith('spc_')) {
             const existingRef = registry.spaces.find((s) => s.space_id === joinSpaceId);
             if (existingRef) {
@@ -182,6 +193,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               // Open Join Space flow to verify identity before adding to registry
               setPendingJoinSpaceId(joinSpaceId);
             }
+          }
+
+          // Clean query params immediately so the URL address bar doesn't keep ?join= or ?space= across refreshes
+          if (joinSpaceId || spaceParam) {
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
           }
         } catch {
           // Ignore
