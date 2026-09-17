@@ -1,16 +1,22 @@
 /**
  * Deterministic NLP & Heuristic Capture Parser for LAD Board
- * Extracts domains, dates, priorities, assigned persons, tags, and action items.
+ * Supports dynamic slot filling for extensible Card Types and Category Schemas.
  */
 
 import { InferredStructure } from './types';
 import { LADObjectPriority } from '../standard/types';
+import { SchemaRegistry } from '../schemas/schema-registry';
+import { LADCardTypeDefinition } from '../schemas/card-types';
 
 export class CaptureParser {
   /**
    * Parses free text and produces an InferredStructure for user review and confirmation.
    */
-  static parse(text: string, referenceDate: Date = new Date()): InferredStructure {
+  static parse(
+    text: string,
+    referenceDate: Date = new Date(),
+    registry: SchemaRegistry = SchemaRegistry.getInstance()
+  ): InferredStructure {
     const raw = text.trim();
     if (!raw) {
       return {
@@ -22,10 +28,11 @@ export class CaptureParser {
         extractedActions: [],
         extractedEntities: [],
         suggestedAttributes: {},
+        fieldValues: {},
       };
     }
 
-    const domain = this.detectDomain(raw);
+    const domain = this.detectDomainWithRegistry(raw, registry);
     const priority = this.detectPriority(raw);
     const dueDate = this.detectDueDate(raw, referenceDate);
     const assignedTo = this.detectAssignedPerson(raw);
@@ -33,32 +40,88 @@ export class CaptureParser {
     const extractedActions = this.extractActionItems(raw);
     const extractedEntities = this.extractEntities(raw);
 
+    // Identify best-matching Card Type from the schema registry
+    const cardType = this.detectCardType(raw, domain, registry);
+    const cardTypeId = cardType?.id;
+
+    // Slot-fill fields defined on the matched card type
+    const fieldValues = this.slotFillFields(raw, cardType, referenceDate, assignedTo);
+
     // Formulate a concise, clear title
-    const title = this.generateTitle(raw, extractedActions);
+    const title = this.generateTitle(raw, extractedActions, cardType, fieldValues);
+
+    const suggestedAttributes: Record<string, any> = {
+      inferred_at: referenceDate.toISOString(),
+      has_followup: Boolean(dueDate || extractedActions.length > 0 || fieldValues.needs_followup),
+      ...fieldValues,
+    };
+
+    if (cardTypeId) {
+      suggestedAttributes.card_type = cardTypeId;
+    }
+
+    if (fieldValues.followup_date || fieldValues.needs_followup) {
+      suggestedAttributes.followup = {
+        date: fieldValues.followup_date || dueDate,
+        reason: fieldValues.followup_reason || 'Follow-up required',
+        status: 'pending',
+      };
+    }
 
     return {
       rawText: raw,
       title,
       domain,
+      cardTypeId,
       priority,
-      dueDate,
-      assignedTo,
+      dueDate: dueDate || fieldValues.due_date,
+      assignedTo: assignedTo || (fieldValues.patient !== 'Me' ? fieldValues.patient : undefined),
       tags,
       extractedActions,
       extractedEntities,
-      suggestedAttributes: {
-        inferred_at: referenceDate.toISOString(),
-        has_followup: Boolean(dueDate || extractedActions.length > 0),
-      },
+      suggestedAttributes,
+      fieldValues,
     };
   }
 
-  private static detectDomain(text: string): string {
+  private static detectDomainWithRegistry(text: string, registry: SchemaRegistry): string {
+    const lower = text.toLowerCase();
+
+    // Check custom and registered categories first
+    const categories = registry.getAllCategories();
+    for (const cat of categories) {
+      const allKeywords = [...cat.keywords, ...(cat.inferredKeywords || [])];
+      for (const kw of allKeywords) {
+        // match word boundary
+        const regex = new RegExp(`\\b${kw}\\b`, 'i');
+        if (regex.test(lower)) {
+          return cat.id;
+        }
+      }
+    }
+
+    // Check registered card types across categories for keywords
+    const cardTypes = registry.getAllCardTypes();
+    for (const ct of cardTypes) {
+      if (ct.nlp?.keywords) {
+        for (const kw of ct.nlp.keywords) {
+          const regex = new RegExp(`\\b${kw}\\b`, 'i');
+          if (regex.test(lower)) {
+            return ct.category;
+          }
+        }
+      }
+    }
+
+    return this.detectDomain(text);
+  }
+
+  static detectDomain(text: string): string {
     const lower = text.toLowerCase();
 
     // Health / Medical keywords
     if (
-      /(doctor|medication|medicine|blood test|prescription|hospital|clinic|appointment|dentist|médico|medicina|medicación|análisis|receta|pastilla|dentista|cita médica)/i.test(
+      /(doctor|medication|medicine|blood test|prescription|hospital|clinic|appointment|dentist|médico|medicina|medicación|análisis|receta|pastilla|dentista|cita médica|consulta)/i.test(
         lower
       )
     ) {
@@ -67,7 +130,7 @@ export class CaptureParser {
 
     // Finance / Banking keywords
     if (
-      /(bank|balance|invoice|bill|payment|salary|account|transfer|dollar|euro|tax|crypto|banco|saldo|factura|pago|salario|cuenta|transferencia|dinero|impuesto)/i.test(
+      /(bank|balance|checking|savings|invoice|bill|payment|salary|account|transfer|dollar|euro|tax|crypto|banco|saldo|factura|pago|salario|cuenta|transferencia|dinero|impuesto)/i.test(
         lower
       )
     ) {
@@ -76,7 +139,7 @@ export class CaptureParser {
 
     // Shopping / Groceries
     if (
-      /(buy|shopping|grocery|supermarket|purchase|store|cart|comprar|supermercado|tienda|compras|despensa)/i.test(
+      /(buy|shopping|grocery|groceries|supermarket|purchase|store|cart|comprar|supermercado|tienda|compras|despensa|mercado)/i.test(
         lower
       )
     ) {
@@ -113,7 +176,214 @@ export class CaptureParser {
     return 'general';
   }
 
-  private static detectPriority(text: string): LADObjectPriority {
+  static detectCardType(
+    text: string,
+    domain: string,
+    registry: SchemaRegistry
+  ): LADCardTypeDefinition | undefined {
+    const candidates = registry.getCardTypesForCategory(domain);
+    if (candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+
+    const lower = text.toLowerCase();
+
+    // Score candidates based on keyword matches
+    let bestCandidate: LADCardTypeDefinition | undefined = undefined;
+    let maxScore = 0;
+
+    for (const ct of candidates) {
+      let score = 0;
+      if (ct.nlp?.keywords) {
+        for (const kw of ct.nlp.keywords) {
+          const regex = new RegExp(`\\b${kw}\\b`, 'i');
+          if (regex.test(lower)) {
+            score++;
+          }
+        }
+      }
+      if (score > maxScore) {
+        maxScore = score;
+        bestCandidate = ct;
+      }
+    }
+
+    return bestCandidate || candidates[0];
+  }
+
+  /**
+   * Slot fills fields defined on the detected card type
+   */
+  private static slotFillFields(
+    raw: string,
+    cardType: LADCardTypeDefinition | undefined,
+    refDate: Date,
+    detectedAssignee?: string
+  ): Record<string, any> {
+    const values: Record<string, any> = {};
+    if (!cardType) return values;
+
+    const lower = raw.toLowerCase();
+
+    switch (cardType.id) {
+      case 'finances.account_balance': {
+        // 1. Bank name detection
+        // Priority 1: Explicit "Bank <X>", "<X> Bank", or "Banco <X>"
+        const explicitBankMatch = raw.match(/\b(Bank\s+[A-Za-z0-9]+|[A-Za-z0-9]+\s+Bank|Banco\s+[A-Za-z0-9]+)\b/i);
+        if (explicitBankMatch) {
+          values.bank = explicitBankMatch[1];
+        } else {
+          // Priority 2: Named word immediately before checking/savings
+          const beforeTypeMatch = raw.match(/\b([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)?)\s+(?:checking|savings|corriente|ahorros)\b/i);
+          if (beforeTypeMatch && !/^(new|my|the|el|la|mi)$/i.test(beforeTypeMatch[1].trim())) {
+            values.bank = beforeTypeMatch[1].trim();
+          } else {
+            const fallbackMatch = raw.match(/\b([A-Za-z0-9]+)\s+account\b/i);
+            if (fallbackMatch && !/(checking|savings|new|my|the)/i.test(fallbackMatch[1])) {
+              values.bank = fallbackMatch[1].trim();
+            }
+          }
+        }
+
+        // 2. Account type
+        if (/(checking|corriente)/i.test(lower)) {
+          values.account_type = 'checking';
+        } else if (/(savings|ahorros)/i.test(lower)) {
+          values.account_type = 'savings';
+        } else if (/(credit|crédito|tarjeta)/i.test(lower)) {
+          values.account_type = 'credit';
+        } else if (/(investment|inversión)/i.test(lower)) {
+          values.account_type = 'investment';
+        } else {
+          values.account_type = 'checking';
+        }
+
+        // 3. Balance detection
+        // Matches "$19", "$1,250.50", "balance is $19", "new balance is $19", "saldo $19"
+        const balanceMatch =
+          raw.match(/(?:\$|usd|€|eur)\s*([\d,]+(?:\.\d+)?)/i) ||
+          raw.match(/(?:balance|saldo)(?:\s+(?:is|es|de|new balance is))?\s*\$?([\d,]+(?:\.\d+)?)/i) ||
+          raw.match(/(?:is|es)\s*\$?([\d,]+(?:\.\d+)?)/i);
+
+        if (balanceMatch) {
+          const numStr = (balanceMatch[1] || '').replace(/,/g, '');
+          const val = parseFloat(numStr);
+          if (!isNaN(val)) {
+            values.balance = val;
+          }
+        }
+        break;
+      }
+
+      case 'shopping.groceries_buying': {
+        // 1. Checklist extraction: "buy milk, bread, eggs" or "comprar leche, pan, huevos"
+        const itemsMatch =
+          raw.match(/(?:buy|buying|shopping for|comprar|lista de compras|supermercado:?)\s+(.+?)(?:(?:\s+budget|\s+due|\s+para|\s+presupuesto)|$)/i);
+
+        if (itemsMatch) {
+          const rawItems = itemsMatch[1];
+          const itemsList = rawItems
+            .split(/[,;\n]|(?:\band\b|\by\b)/i)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && !/^(budget|due|date|para)/i.test(s));
+
+          if (itemsList.length > 0) {
+            values.checklist = itemsList.map((item, idx) => ({
+              id: `item_${Date.now()}_${idx}`,
+              text: item,
+              completed: false,
+            }));
+          }
+        }
+
+        // 2. Budget extraction: "budget $50", "presupuesto $50"
+        const budgetMatch = raw.match(/(?:budget|presupuesto)(?:\s+(?:is|es|de))?\s*\$?([\d,]+(?:\.\d+)?)/i);
+        if (budgetMatch) {
+          const val = parseFloat(budgetMatch[1].replace(/,/g, ''));
+          if (!isNaN(val)) {
+            values.estimated_budget = val;
+          }
+        }
+
+        // 3. Target date
+        const targetDate = this.detectDueDate(raw, refDate);
+        if (targetDate) {
+          values.due_date = targetDate;
+        }
+        break;
+      }
+
+      case 'health.medical_appointment': {
+        // 1. Specialty detection
+        const specialtyMap: Record<string, string> = {
+          dentist: 'Dentistry',
+          dentista: 'Dentistry',
+          dental: 'Dentistry',
+          cardio: 'Cardiology',
+          cardiólogo: 'Cardiology',
+          cardiologist: 'Cardiology',
+          derma: 'Dermatology',
+          dermatologist: 'Dermatology',
+          dermatólogo: 'Dermatology',
+          pediatra: 'Pediatrics',
+          pediatrician: 'Pediatrics',
+          ophthalmologist: 'Ophthalmology',
+          oftalmólogo: 'Ophthalmology',
+          eye: 'Ophthalmology',
+          general: 'General Medicine',
+          médico: 'General Medicine',
+          doctor: 'General Medicine',
+        };
+
+        for (const [key, spec] of Object.entries(specialtyMap)) {
+          if (new RegExp(`\\b${key}\\b`, 'i').test(lower)) {
+            values.specialty = spec;
+            break;
+          }
+        }
+        if (!values.specialty) values.specialty = 'General Medicine';
+
+        // 2. Patient detection
+        values.patient = detectedAssignee || 'Me';
+
+        // 3. Appointment date (defaults to today unless specified)
+        const dateMatch = this.detectDueDate(raw, refDate);
+        values.date = dateMatch || refDate.toISOString().split('T')[0];
+
+        // 4. Outcome extraction: "result is...", "outcome: ...", "doctor said..."
+        const outcomeMatch =
+          raw.match(/(?:outcome|result|doctor said|indication|indicaciones|receta|diagnóstico|diagnostico):?\s*([^,.;]+)/i);
+        if (outcomeMatch) {
+          values.outcome = outcomeMatch[1].trim();
+        }
+
+        // 5. Follow-up detection: "needs follow up in 2 weeks", "follow up in X days", "control en 2 semanas"
+        const hasFollowup = /(follow[- ]?up|control|seguimiento|revisión|revision)/i.test(lower);
+        if (hasFollowup) {
+          values.needs_followup = true;
+          const followupDate = this.detectDueDate(raw, refDate);
+          if (followupDate) {
+            values.followup_date = followupDate;
+          }
+          const reasonMatch = raw.match(/(?:follow[- ]?up|control|seguimiento)\s+(?:for|para|because|por)?\s*([^,.;]+)/i);
+          if (reasonMatch) {
+            values.followup_reason = reasonMatch[1].trim();
+          }
+        } else {
+          values.needs_followup = false;
+        }
+        break;
+      }
+
+      default: {
+        // General slot filling
+        break;
+      }
+    }
+
+    return values;
+  }
+
+  static detectPriority(text: string): LADObjectPriority {
     const lower = text.toLowerCase();
     if (/(urgent|asap|emergency|urgente|emergencia|inmediatamente|critico|critical)/i.test(lower)) {
       return 'urgent';
@@ -127,11 +397,12 @@ export class CaptureParser {
     return 'medium';
   }
 
-  private static detectDueDate(text: string, refDate: Date): string | undefined {
+  static detectDueDate(text: string, refDate: Date): string | undefined {
     const lower = text.toLowerCase();
 
     // "in X weeks" / "en X semanas"
-    const weeksMatch = lower.match(/(?:in|en)\s+(\d+|two|three|four|dos|tres|cuatro)\s+weeks?/i) ||
+    const weeksMatch =
+      lower.match(/(?:in|en)\s+(\d+|two|three|four|dos|tres|cuatro)\s+weeks?/i) ||
       lower.match(/(?:en)\s+(\d+|dos|tres|cuatro)\s+semanas?/i);
     if (weeksMatch) {
       let numWeeks = 1;
@@ -147,7 +418,8 @@ export class CaptureParser {
     }
 
     // "in X days" / "en X días"
-    const daysMatch = lower.match(/(?:in|en)\s+(\d+|one|two|three|uno|dos|tres)\s+days?/i) ||
+    const daysMatch =
+      lower.match(/(?:in|en)\s+(\d+|one|two|three|uno|dos|tres)\s+days?/i) ||
       lower.match(/(?:en)\s+(\d+|uno|dos|tres)\s+d[ií]as?/i);
     if (daysMatch) {
       let numDays = 1;
@@ -183,7 +455,7 @@ export class CaptureParser {
     return undefined;
   }
 
-  private static detectAssignedPerson(text: string): string | undefined {
+  static detectAssignedPerson(text: string): string | undefined {
     const lower = text.toLowerCase();
 
     // Family roles or names
@@ -201,8 +473,10 @@ export class CaptureParser {
       }
     }
 
-    // Named assignments like "needs to schedule", "assigned to John", "para Carlos"
-    const assignedMatch = text.match(/(?:assigned to|for|para|needs to|debe)\s+([A-Z][a-z]+)/);
+    // Named assignments like "needs to schedule", "assigned to John", "para Carlos", "for Carlos"
+    const assignedMatch =
+      text.match(/(?:assigned to|for|para|needs to|debe)\s+([A-Z][a-z]+)/) ||
+      text.match(/@([A-Za-z0-9_]+)/);
     if (assignedMatch) {
       return assignedMatch[1];
     }
@@ -210,7 +484,7 @@ export class CaptureParser {
     return undefined;
   }
 
-  private static detectTags(text: string, domain: string): string[] {
+  static detectTags(text: string, domain: string): string[] {
     const tags = new Set<string>();
     tags.add(domain);
 
@@ -225,15 +499,15 @@ export class CaptureParser {
     const lower = text.toLowerCase();
     if (lower.includes('medication') || lower.includes('medicación')) tags.add('medication');
     if (lower.includes('blood test') || lower.includes('análisis')) tags.add('lab-test');
-    if (lower.includes('follow-up') || lower.includes('seguimiento')) tags.add('follow-up');
+    if (lower.includes('follow-up') || lower.includes('seguimiento') || lower.includes('follow up'))
+      tags.add('follow-up');
     if (lower.includes('bill') || lower.includes('factura')) tags.add('bill');
 
     return Array.from(tags);
   }
 
-  private static extractActionItems(text: string): string[] {
+  static extractActionItems(text: string): string[] {
     const actions: string[] = [];
-    // Split by comma, semicolon or period
     const clauses = text.split(/[,.;]/).map((c) => c.trim()).filter((c) => c.length > 0);
 
     for (const clause of clauses) {
@@ -249,7 +523,7 @@ export class CaptureParser {
     return actions.length > 0 ? actions : [text];
   }
 
-  private static extractEntities(text: string): Array<{ name: string; type: string }> {
+  static extractEntities(text: string): Array<{ name: string; type: string }> {
     const entities: Array<{ name: string; type: string }> = [];
 
     if (/(doctor|médico)/i.test(text)) {
@@ -257,6 +531,9 @@ export class CaptureParser {
     }
     if (/(dad|papá)/i.test(text)) {
       entities.push({ name: 'Dad', type: 'person' });
+    }
+    if (/(mom|mamá)/i.test(text)) {
+      entities.push({ name: 'Mom', type: 'person' });
     }
     if (/(blood test|análisis)/i.test(text)) {
       entities.push({ name: 'Blood Test', type: 'procedure' });
@@ -268,7 +545,27 @@ export class CaptureParser {
     return entities;
   }
 
-  private static generateTitle(text: string, actions: string[]): string {
+  static generateTitle(
+    text: string,
+    actions: string[],
+    cardType?: LADCardTypeDefinition,
+    fields?: Record<string, any>
+  ): string {
+    // Schema-tailored smart titles
+    if (cardType?.id === 'finances.account_balance' && fields?.bank) {
+      const typeLabel = fields.account_type ? ` ${fields.account_type}` : '';
+      return `${fields.bank}${typeLabel} Balance`;
+    }
+
+    if (cardType?.id === 'shopping.groceries_buying' && fields?.title) {
+      return fields.title;
+    }
+
+    if (cardType?.id === 'health.medical_appointment' && fields?.specialty) {
+      const patientSuffix = fields.patient && fields.patient !== 'Me' ? ` (${fields.patient})` : '';
+      return `${fields.specialty} Appointment${patientSuffix}`;
+    }
+
     // If the text is short enough, use it
     if (text.length <= 60) return text;
 

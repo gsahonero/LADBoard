@@ -8,6 +8,7 @@ export interface InferredStructure {
   rawText: string;
   title: string;
   domain: string;
+  cardTypeId?: string;
   priority: LADObjectPriority;
   dueDate?: string;
   assignedTo?: string;
@@ -15,4 +16,5 @@ export interface InferredStructure {
   extractedActions: string[];
   extractedEntities: Array<{ name: string; type: string }>;
   suggestedAttributes: Record<string, any>;
+  fieldValues?: Record<string, any>;
 }

@@ -834,6 +834,14 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (structure: InferredStructure): Promise<LADObject> => {
       if (!activeSpace || !userRegistry) throw new Error('No active space');
 
+      const mergedAttributes: Record<string, any> = {
+        ...(structure.suggestedAttributes || {}),
+        ...(structure.fieldValues || {}),
+      };
+      if (structure.cardTypeId) {
+        mergedAttributes.card_type = structure.cardTypeId;
+      }
+
       const obj = activeSpace.objectStore.createObject({
         title: structure.title,
         description: structure.rawText,
@@ -842,17 +850,42 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         priority: structure.priority,
         dueDate: structure.dueDate,
         assignedTo: structure.assignedTo,
-        attributes: structure.suggestedAttributes,
+        attributes: mergedAttributes,
         actorUserId: userRegistry.user_id,
       });
 
       await activeSpace.objectStore.save(obj);
 
       // Create graph node for object
-      await activeSpace.graphStore.ensureNodeForEntity(obj.object_id, 'object', obj.title, {
+      const objNode = await activeSpace.graphStore.ensureNodeForEntity(obj.object_id, 'object', obj.title, {
         domain: obj.domain,
         priority: obj.priority,
+        card_type: structure.cardTypeId,
       });
+
+      // If assignedTo or patient is specified, link person node
+      const personName =
+        structure.assignedTo ||
+        (mergedAttributes.patient && mergedAttributes.patient !== 'Me' ? mergedAttributes.patient : undefined);
+      if (personName) {
+        const personNode = await activeSpace.graphStore.ensureNodeForEntity(
+          `person_${personName.toLowerCase().replace(/\s+/g, '_')}`,
+          'user',
+          personName
+        );
+        try {
+          await activeSpace.graphStore.addEdge({
+            edge_id: `edge_${obj.object_id}_${personNode.node_id}`,
+            source: objNode.node_id,
+            target: personNode.node_id,
+            type: 'assigned_to',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        } catch {
+          // Edge might already exist
+        }
+      }
 
       // Commit immediate operation
       await activeSpace.changeAggregator.commitImmediate({

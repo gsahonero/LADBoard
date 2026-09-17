@@ -1,6 +1,7 @@
 /**
  * Active Layer Engine for LAD Board
  * Continuously evaluates declarative triggers across Space objects and surfaces attention alerts.
+ * Implements non-destructive auto-archiving of passive cards and follow-up awakening.
  */
 
 import { LADActiveAlert, LADObject } from '../standard/types';
@@ -28,6 +29,7 @@ export class ActiveEngine {
       evaluate: (obj, { now }) => {
         if (obj.domain !== 'finances') return null;
         if (obj.status !== 'active') return null;
+        if (obj.attributes?.card_type === 'finances.account_balance') return null;
 
         const checkDate = obj.last_checked_at ? new Date(obj.last_checked_at) : new Date(obj.updated_at);
         const diffMs = now.getTime() - checkDate.getTime();
@@ -54,7 +56,7 @@ export class ActiveEngine {
     // 2. Upcoming Follow-up / Appointment Rule
     this.registerRule({
       ruleId: 'upcoming_due_events',
-      name: 'Upcoming Appointments & Follow-ups',
+      name: 'Upcoming Appointments & Due Dates',
       type: 'temporal_due',
       dueWindowDays: 3,
       evaluate: (obj, { now }) => {
@@ -113,6 +115,43 @@ export class ActiveEngine {
         return null;
       },
     });
+
+    // 4. Pending Follow-ups & Awakening Rule
+    this.registerRule({
+      ruleId: 'pending_followups',
+      name: 'Pending Follow-up Actions',
+      type: 'followup',
+      evaluate: (obj, { now }) => {
+        if (obj.status !== 'active') return null;
+        const followup = obj.attributes?.followup;
+        if (!followup || followup.status === 'resolved') return null;
+
+        const targetDateStr = followup.date || obj.due_date;
+        if (!targetDateStr) return null;
+
+        const targetDate = new Date(targetDateStr);
+        const diffMs = targetDate.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        // Awakening: when date is arrived or within 2 days or overdue
+        if (diffDays <= 2) {
+          return {
+            alert_id: `alert_followup_${obj.object_id}`,
+            space_id: obj.space_id,
+            type: 'pending_followup',
+            target_id: obj.object_id,
+            title: `Follow-up: ${obj.title}`,
+            message: followup.reason || 'Follow-up action is due.',
+            due_date: targetDateStr,
+            domain: obj.domain,
+            status: 'active',
+            created_at: now.toISOString(),
+            metadata: { followup, target_object: obj },
+          };
+        }
+        return null;
+      },
+    });
   }
 
   registerRule(rule: ActiveTriggerRule) {
@@ -142,14 +181,21 @@ export class ActiveEngine {
     return Array.from(this.activeAlerts.values());
   }
 
-  evaluateObjects(objects: LADObject[], referenceDate: Date = new Date()): LADActiveAlert[] {
+  evaluateObjects(
+    objects: LADObject[],
+    referenceDate: Date = new Date(),
+    autoArchiveDays: number = 7
+  ): LADActiveAlert[] {
     const currentAlertMap = new Map<string, LADActiveAlert>();
 
     for (const obj of objects) {
+      // 1. Active Rules Evaluation
+      let hasActiveAlert = false;
       for (const rule of this.rules) {
         try {
           const alert = rule.evaluate(obj, { now: referenceDate });
           if (alert) {
+            hasActiveAlert = true;
             // Check if already dismissed or snoozed
             const existing = this.activeAlerts.get(alert.alert_id);
             if (existing && existing.status !== 'active') {
@@ -160,6 +206,25 @@ export class ActiveEngine {
           }
         } catch (err) {
           console.warn(`Rule evaluation error [${rule.ruleId}]:`, err);
+        }
+      }
+
+      // 2. Non-destructive Auto-Archival for Passive Cards without active attention alerts
+      const isPassive =
+        !obj.due_date &&
+        !obj.attributes?.followup?.date &&
+        !obj.attributes?.needs_followup;
+
+      if (isPassive && !hasActiveAlert && obj.status === 'active') {
+        const checkDate = obj.last_checked_at
+          ? new Date(obj.last_checked_at)
+          : new Date(obj.updated_at || obj.created_at);
+        const diffMs = referenceDate.getTime() - checkDate.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays >= autoArchiveDays) {
+          obj.status = 'archived';
+          obj.updated_at = referenceDate.toISOString();
         }
       }
     }

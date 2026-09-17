@@ -8,7 +8,7 @@ export interface ActiveTriggerRule {
   ruleId: string;
   name: string;
   domain?: string;
-  type: 'staleness' | 'temporal_due' | 'unresolved_state' | 'custom';
+  type: 'staleness' | 'temporal_due' | 'unresolved_state' | 'followup' | 'custom';
   stalenessThresholdDays?: number;
   dueWindowDays?: number;
   evaluate: (object: LADObject, context: { now: Date }) => LADActiveAlert | null;

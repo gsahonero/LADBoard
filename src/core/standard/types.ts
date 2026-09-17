@@ -64,6 +64,8 @@ export interface LADSpaceSettings {
     gmail_enabled?: boolean;
     calendar_enabled?: boolean;
   };
+  auto_archive_days?: number;
+  custom_card_types?: any[];
 }
 
 export interface LADSpaceManifest {

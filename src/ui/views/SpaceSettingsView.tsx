@@ -26,7 +26,10 @@ import {
   Trash2,
   LogOut,
   AlertTriangle,
+  Archive,
 } from 'lucide-react';
+import { SchemaRegistry } from '../../core/schemas/schema-registry';
+
 
 interface SpaceSettingsViewProps {
   onSwitchToGlobal?: () => void;
@@ -61,6 +64,11 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
   const [description, setDescription] = useState(activeManifest?.description || '');
   const [categories, setCategories] = useState<string[]>(activeManifest?.categories || []);
   const [newCategoryInput, setNewCategoryInput] = useState('');
+
+  // Auto-Archive State
+  const [autoArchiveDays, setAutoArchiveDays] = useState<number>(
+    activeManifest?.settings?.auto_archive_days ?? 7
+  );
 
   // Calendar Integration State
   const [calendarEnabled, setCalendarEnabled] = useState(
@@ -203,6 +211,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
       categories,
       settings: {
         ...(activeManifest.settings || {}),
+        auto_archive_days: Number(autoArchiveDays) || 7,
         calendar: {
           enabled: calendarEnabled,
           mode: calendarMode,
@@ -584,7 +593,92 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
         </div>
       </div>
 
-      {/* 2. Google Calendar Integration */}
+      {/* 2. Card Schemas & Ambient Lifecycle Policy */}
+      <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Archive className="w-4 h-4 text-amber-500" />
+              <span>Card Schemas & Ambient Lifecycle</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Configure how cards enter the space, how long passive records stay active before auto-archiving, and inspect active schemas.
+            </p>
+          </div>
+        </div>
+
+        {/* Auto-Archive Duration Setting */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                Passive Cards Auto-Archive Duration (Days)
+              </label>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Cards without due dates or pending follow-ups (e.g. account balances) transition to the Archive section after this many days. Cards are never deleted.
+              </p>
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={autoArchiveDays}
+              onChange={(e) => setAutoArchiveDays(Math.max(1, parseInt(e.target.value) || 7))}
+              className="w-20 px-3 py-1.5 text-xs text-center font-bold bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+              data-testid="auto-archive-days-input"
+            />
+          </div>
+        </div>
+
+        {/* Card Types Grid */}
+        <div className="space-y-2.5">
+          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
+            Active Card Types in this Space
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SchemaRegistry.getInstance()
+              .getAllCardTypes()
+              .map((ct) => (
+                <div
+                  key={ct.id}
+                  className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {ct.name}
+                    </span>
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                        ct.isDefault
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 border border-indigo-200'
+                      }`}
+                    >
+                      {ct.isDefault ? 'Default' : 'Custom'}
+                    </span>
+                  </div>
+                  {ct.description && (
+                    <p className="text-[11px] text-slate-500 line-clamp-1">
+                      {ct.description}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {ct.fields.map((f) => (
+                      <span
+                        key={f.key}
+                        className="text-[10px] px-1.5 py-0.5 bg-slate-50 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                      >
+                        {f.label} ({f.type})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Google Calendar Integration */}
       <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
