@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LADObject, LADObjectPriority } from '../../core/standard/types';
+import { LADObject } from '../../core/standard/types';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
 import { OnItsWayModal } from './OnItsWayModal';
+import { CardEditModal } from './CardEditModal';
+import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import {
   Heart,
   CreditCard,
@@ -18,7 +20,6 @@ import {
   Circle,
   Trash2,
   Edit2,
-  Check,
   Clock,
   RotateCcw,
 } from 'lucide-react';
@@ -27,39 +28,16 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const { updateObject, deleteObject } = useLAD();
   const { t } = useI18n();
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isOnItsWayOpen, setIsOnItsWayOpen] = useState(false);
-
-  // Edit fields
-  const [editTitle, setEditTitle] = useState(obj.title);
-  const [editDescription, setEditDescription] = useState(obj.description || '');
-  const [editDueDate, setEditDueDate] = useState(obj.due_date || '');
-  const [editAssignedTo, setEditAssignedTo] = useState(obj.assigned_to || '');
-  const [editPriority, setEditPriority] = useState<LADObjectPriority>(obj.priority || 'medium');
-  const [editBalance, setEditBalance] = useState(
-    obj.attributes?.balance !== undefined ? String(obj.attributes.balance) : ''
-  );
-  const [editBank, setEditBank] = useState(obj.attributes?.bank || '');
 
   const isCompleted = obj.status === 'completed';
   const isArchived = obj.status === 'archived';
   const cardType = obj.attributes?.card_type;
+  const registeredCardTypeDef = cardType ? SchemaRegistry.getInstance().getCardType(cardType) : undefined;
   const checklist: Array<{ id: string; text: string; completed: boolean }> =
     obj.attributes?.checklist || [];
   const followup = obj.attributes?.followup;
-
-  const handleStartEditing = () => {
-    setEditTitle(obj.title);
-    setEditDescription(obj.description || '');
-    setEditDueDate(obj.due_date || '');
-    setEditAssignedTo(obj.assigned_to || '');
-    setEditPriority(obj.priority || 'medium');
-    setEditBalance(
-      obj.attributes?.balance !== undefined ? String(obj.attributes.balance) : ''
-    );
-    setEditBank(obj.attributes?.bank || '');
-    setIsEditing(true);
-  };
 
   const handleToggleCompleted = async () => {
     await updateObject(
@@ -101,27 +79,6 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
     }
   };
 
-  const handleSaveEdit = async () => {
-    const patch: Partial<LADObject> = {
-      title: editTitle.trim() || obj.title,
-      description: editDescription,
-      due_date: editDueDate.trim() || undefined,
-      assigned_to: editAssignedTo.trim() || undefined,
-      priority: editPriority,
-    };
-
-    const newAttrs = { ...obj.attributes };
-    if (editBalance !== '') {
-      newAttrs.balance = parseFloat(editBalance) || 0;
-    }
-    if (editBank !== '') {
-      newAttrs.bank = editBank;
-    }
-    patch.attributes = newAttrs;
-
-    await updateObject(obj.object_id, patch, true);
-    setIsEditing(false);
-  };
 
   const getDomainStyle = (domain: string) => {
     switch (domain) {
@@ -182,13 +139,9 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   return (
     <>
       <motion.div
-        whileHover={{ y: isEditing ? 0 : -2, transition: { duration: 0.2 } }}
-        className={`p-4 bg-white dark:bg-slate-900 rounded-2xl border ${
-          isEditing
-            ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg'
-            : `border-slate-200 dark:border-slate-800/80 shadow-sm transition-shadow hover:shadow-md ${style.border}`
-        } flex flex-col justify-between space-y-3 group ${
-          isCompleted && !isEditing ? 'opacity-65 bg-slate-50/60 dark:bg-slate-950/60' : ''
+        whileHover={{ y: -2, transition: { duration: 0.2 } }}
+        className={`p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-sm transition-shadow hover:shadow-md ${style.border} flex flex-col justify-between space-y-3 group ${
+          isCompleted ? 'opacity-65 bg-slate-50/60 dark:bg-slate-950/60' : ''
         } ${isArchived ? 'opacity-75 border-dashed border-slate-300 dark:border-slate-700' : ''}`}
         data-testid={`card-${obj.object_id}`}
       >
@@ -221,21 +174,29 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                 </span>
               )}
 
+              {registeredCardTypeDef &&
+                !['finances.account_balance', 'shopping.groceries_buying', 'health.medical_appointment'].includes(
+                  cardType || ''
+                ) && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-lad-50 dark:bg-lad-950/40 text-lad-700 dark:text-lad-300 rounded-full border border-lad-200 dark:border-lad-800">
+                    {registeredCardTypeDef.name}
+                  </span>
+                )}
+
               {isArchived && (
                 <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full">
                   Archived
                 </span>
               )}
 
-              {obj.priority === 'urgent' && !isEditing && (
+              {obj.priority === 'urgent' && (
                 <span className="text-[10px] font-bold px-1.5 py-0.2 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-full">
                   {t('capture.priorities.urgent')}
                 </span>
               )}
             </div>
 
-            {!isEditing && (
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {isArchived ? (
                   <motion.button
                     whileTap={{ scale: 0.9 }}
@@ -251,16 +212,17 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   <>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
-                      onClick={handleStartEditing}
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded"
+                      onClick={() => setIsEditModalOpen(true)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded cursor-pointer"
                       title={t('common.edit')}
+                      data-testid="edit-card-button"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </motion.button>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => deleteObject(obj.object_id)}
-                      className="p-1 text-slate-400 hover:text-rose-500 rounded"
+                      className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
                       title={t('common.delete')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -268,101 +230,10 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   </>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Content / Editor */}
-          {isEditing ? (
-            <div className="space-y-3 pt-1">
-              {/* Title */}
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full text-xs font-semibold p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white"
-                  autoFocus
-                />
-              </div>
-
-              {cardType === 'finances.account_balance' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                      Bank
-                    </label>
-                    <input
-                      type="text"
-                      value={editBank}
-                      onChange={(e) => setEditBank(e.target.value)}
-                      className="w-full text-xs p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                      Balance
-                    </label>
-                    <input
-                      type="number"
-                      value={editBalance}
-                      onChange={(e) => setEditBalance(e.target.value)}
-                      className="w-full text-xs p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Date & Assignee (for non-balance cards) */}
-              {cardType !== 'finances.account_balance' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                      Due Date
-                    </label>
-                    <input
-                      type="date"
-                      value={editDueDate}
-                      onChange={(e) => setEditDueDate(e.target.value)}
-                      className="w-full text-xs p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                      Assigned To
-                    </label>
-                    <input
-                      type="text"
-                      value={editAssignedTo}
-                      onChange={(e) => setEditAssignedTo(e.target.value)}
-                      className="w-full text-xs p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  className="px-4 py-1.5 bg-lad-600 hover:bg-lad-700 text-white rounded-xl text-xs font-bold flex items-center gap-1"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Save</span>
-                </button>
-              </div>
             </div>
-          ) : (
-            <div>
+
+          {/* Card Body */}
+          <div>
               {/* Specialized View: Account Balance */}
               {cardType === 'finances.account_balance' ? (
                 <div className="space-y-2">
@@ -500,6 +371,65 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     </div>
                   )}
                 </div>
+              ) : registeredCardTypeDef && registeredCardTypeDef.fields.length > 0 ? (
+                /* Dynamic View for Custom or Registered Card Types */
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                      {obj.title}
+                    </h3>
+                  </div>
+
+                  {/* Dynamic field attributes according to schema */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                    {registeredCardTypeDef.fields.map((field) => {
+                      if (field.key === 'title') return null;
+                      const val = obj.attributes?.[field.key];
+                      if (val === undefined || val === '' || val === null) return null;
+
+                      if (field.type === 'checklist' && Array.isArray(val)) {
+                        return (
+                          <div key={field.key} className="col-span-full space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-slate-400">
+                              {field.label} ({val.filter((i: any) => i.completed).length}/{val.length})
+                            </span>
+                            <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                              {val.map((item: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => handleToggleChecklistItem(idx)}
+                                  className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
+                                >
+                                  <input type="checkbox" checked={item.completed} readOnly className="rounded" />
+                                  <span className={item.completed ? 'line-through text-slate-400' : ''}>
+                                    {item.text}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={field.key} className="text-xs">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                            {field.label}
+                          </span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {field.type === 'currency' ? `$${Number(val).toLocaleString()}` : String(val)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {obj.description && obj.description !== obj.title && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2">
+                      {obj.description}
+                    </p>
+                  )}
+                </div>
               ) : (
                 /* Fallback View: General Card */
                 <div className="flex items-start gap-2.5">
@@ -531,61 +461,65 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Footer Meta: Dates, Actions & Tags */}
-        {!isEditing && (
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {obj.due_date && cardType !== 'health.medical_appointment' && (
-                  <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-blue-200/50 dark:border-blue-800/50">
-                    <Calendar className="w-3 h-3 text-blue-500" />
-                    <span>{obj.due_date}</span>
-                  </span>
-                )}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {obj.due_date && cardType !== 'health.medical_appointment' && (
+                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-blue-200/50 dark:border-blue-800/50">
+                  <Calendar className="w-3 h-3 text-blue-500" />
+                  <span>{obj.due_date}</span>
+                </span>
+              )}
 
-                {obj.assigned_to && cardType !== 'health.medical_appointment' && (
-                  <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-[10px] font-semibold">
-                    <User className="w-3 h-3 text-slate-400" />
-                    <span>{obj.assigned_to}</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Actionable button for general cards with due dates */}
-              {obj.due_date && cardType !== 'health.medical_appointment' && !isArchived && (
-                <button
-                  type="button"
-                  onClick={() => setIsOnItsWayOpen(true)}
-                  className="px-2 py-0.5 text-[10px] font-semibold text-lad-600 hover:bg-lad-50 dark:hover:bg-lad-950/40 rounded-md border border-lad-200 dark:border-lad-800 transition-colors"
-                >
-                  On its way
-                </button>
+              {obj.assigned_to && cardType !== 'health.medical_appointment' && (
+                <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-[10px] font-semibold">
+                  <User className="w-3 h-3 text-slate-400" />
+                  <span>{obj.assigned_to}</span>
+                </span>
               )}
             </div>
 
-            {obj.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {obj.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-[9px] font-medium text-slate-400 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.2 rounded"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
+            {/* Actionable button for general cards with due dates */}
+            {obj.due_date && cardType !== 'health.medical_appointment' && !isArchived && (
+              <button
+                type="button"
+                onClick={() => setIsOnItsWayOpen(true)}
+                className="px-2 py-0.5 text-[10px] font-semibold text-lad-600 hover:bg-lad-50 dark:hover:bg-lad-950/40 rounded-md border border-lad-200 dark:border-lad-800 transition-colors"
+              >
+                On its way
+              </button>
             )}
           </div>
-        )}
+
+          {obj.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {obj.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[9px] font-medium text-slate-400 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.2 rounded"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </motion.div>
 
       {/* OnItsWayModal resolution */}
       <OnItsWayModal
         isOpen={isOnItsWayOpen}
         onClose={() => setIsOnItsWayOpen(false)}
+        obj={obj}
+      />
+
+      {/* Full Schema Card Edit Modal */}
+      <CardEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
         obj={obj}
       />
     </>

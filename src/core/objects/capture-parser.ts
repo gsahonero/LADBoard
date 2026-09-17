@@ -380,6 +380,23 @@ export class CaptureParser {
       }
     }
 
+    // Match select field options (including multi-word phrases with spaces) for any card type
+    if (cardType?.fields) {
+      for (const field of cardType.fields) {
+        if (field.type === 'select' && field.options && !values[field.key]) {
+          const sortedOptions = [...field.options].sort((a, b) => b.length - a.length);
+          for (const opt of sortedOptions) {
+            const escaped = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const optRegex = new RegExp(`\\b${escaped}\\b`, 'i');
+            if (optRegex.test(raw)) {
+              values[field.key] = opt;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     return values;
   }
 

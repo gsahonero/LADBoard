@@ -488,15 +488,19 @@ export const SmartCaptureBar: React.FC = () => {
                             {field.label}
                           </label>
                           <select
-                            value={val}
+                            value={val || ''}
                             onChange={(e) => handleFieldChange(field.key, e.target.value)}
                             className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                           >
+                            <option value="">Select {field.label}...</option>
                             {field.options?.map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
                               </option>
                             ))}
+                            {val && !field.options?.includes(val) && (
+                              <option value={val}>{val} (Custom)</option>
+                            )}
                           </select>
                         </div>
                       );

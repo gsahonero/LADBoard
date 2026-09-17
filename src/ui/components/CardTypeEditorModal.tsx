@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Copy,
   Lock,
+  Loader2,
 } from 'lucide-react';
 
 interface CardTypeEditorModalProps {
@@ -51,22 +52,31 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [keywordsStr, setKeywordsStr] = useState('');
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(7);
   const [fields, setFields] = useState<LADFieldDefinition[]>([]);
+  const [optionsRawMap, setOptionsRawMap] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load state on open
   useEffect(() => {
+    setIsSaving(false);
     if (cardType) {
       setName(cardType.name);
       setCategory(cardType.category);
       setDescription(cardType.description || '');
       setKeywordsStr(cardType.nlp?.keywords?.join(', ') || '');
       setAutoArchiveDays(cardType.lifecycle?.autoArchiveDays || 7);
-      setFields(
-        cardType.fields.map((f) => ({
-          ...f,
-          options: f.options ? [...f.options] : undefined,
-        }))
-      );
+      const initialFields = cardType.fields.map((f) => ({
+        ...f,
+        options: f.options ? [...f.options] : undefined,
+      }));
+      setFields(initialFields);
+      const rawMap: Record<number, string> = {};
+      initialFields.forEach((f, idx) => {
+        if (f.type === 'select' && f.options) {
+          rawMap[idx] = f.options.join(', ');
+        }
+      });
+      setOptionsRawMap(rawMap);
     } else {
       setName('');
       setCategory(defaultCategory);
@@ -77,6 +87,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         { key: 'title', label: 'Title', type: 'text', required: true },
         { key: 'comments', label: 'Comments / Notes', type: 'text', required: false },
       ]);
+      setOptionsRawMap({});
     }
     setError(null);
   }, [cardType, defaultCategory, isOpen]);
@@ -99,6 +110,15 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const handleRemoveField = (index: number) => {
     if (fields.length <= 1) return;
     setFields(fields.filter((_, i) => i !== index));
+    setOptionsRawMap((prev) => {
+      const next: Record<number, string> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const num = Number(k);
+        if (num < index) next[num] = v;
+        else if (num > index) next[num - 1] = v;
+      });
+      return next;
+    });
   };
 
   const handleFieldChange = (index: number, patch: Partial<LADFieldDefinition>) => {
@@ -111,12 +131,31 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
     setFields(updated);
   };
 
+  const handleOptionsRawChange = (fieldIdx: number, rawValue: string) => {
+    setOptionsRawMap((prev) => ({ ...prev, [fieldIdx]: rawValue }));
+    // Split by comma and trim each individual option, preserving spaces inside each option
+    const parsed = rawValue
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    handleFieldChange(fieldIdx, { options: parsed });
+  };
+
+  const handleRemoveOptionBadge = (fieldIdx: number, optToRemove: string) => {
+    const currentOptions = fields[fieldIdx]?.options || [];
+    const updatedOptions = currentOptions.filter((o) => o !== optToRemove);
+    handleFieldChange(fieldIdx, { options: updatedOptions });
+    setOptionsRawMap((prev) => ({ ...prev, [fieldIdx]: updatedOptions.join(', ') }));
+  };
+
   const handleDuplicateAsCustom = () => {
     setName(`${cardType?.name || 'Card'} (Custom)`);
     setCategory(cardType?.category || defaultCategory);
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     if (!name.trim()) {
       setError('Card Type name is required');
       return;
@@ -126,6 +165,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setError('At least one field must be defined');
       return;
     }
+
+    setIsSaving(true);
+    setError(null);
 
     try {
       const id = isEditing && cardType
@@ -173,6 +215,8 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save card type');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -413,22 +457,57 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
 
                     {/* Options for Select fields */}
                     {field.type === 'select' && (
-                      <div className="pt-1">
-                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
-                          Dropdown Options (comma separated)
-                        </label>
+                      <div className="pt-1 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block">
+                            Dropdown Options (allows spaces, comma-separated)
+                          </label>
+                          {field.options && field.options.length > 0 && (
+                            <span className="text-[9px] font-medium text-slate-400">
+                              {field.options.length} {field.options.length === 1 ? 'option' : 'options'}
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           disabled={isDefault}
-                          value={field.options?.join(', ') || ''}
-                          placeholder="e.g. Option A, Option B, Option C"
-                          onChange={(e) =>
-                            handleFieldChange(idx, {
-                              options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                            })
-                          }
+                          value={optionsRawMap[idx] !== undefined ? optionsRawMap[idx] : (field.options?.join(', ') || '')}
+                          placeholder="e.g. Checking Account, Savings Account, Credit Card"
+                          onChange={(e) => handleOptionsRawChange(idx, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const current = optionsRawMap[idx] ?? (field.options?.join(', ') || '');
+                              if (current.trim() && !current.endsWith(', ')) {
+                                handleOptionsRawChange(idx, current + ', ');
+                              }
+                            }
+                          }}
                           className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white disabled:opacity-60"
                         />
+                        {/* Interactive Pill Badges showing parsed options with spaces preserved */}
+                        {field.options && field.options.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {field.options.map((opt, optIdx) => (
+                              <span
+                                key={optIdx}
+                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-lad-50 text-lad-700 border border-lad-200/60 dark:bg-lad-950/40 dark:text-lad-300 dark:border-lad-800"
+                              >
+                                <span>{opt}</span>
+                                {!isDefault && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveOptionBadge(idx, opt)}
+                                    className="hover:text-rose-500 rounded cursor-pointer transition-colors ml-0.5"
+                                    title={`Remove "${opt}"`}
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -437,16 +516,33 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
             </div>
           </div>
 
+          {/* Interactive Progress Indicator Bar */}
+          {isSaving && (
+            <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative" data-testid="save-card-type-progress">
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: '100%' }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'easeInOut' }}
+                className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-lad-400 via-lad-600 to-lad-500 rounded-full"
+              />
+            </div>
+          )}
+
           {/* Modal Footer */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <span className="text-[11px] text-slate-400">
-              {isDefault ? 'Viewing default schema' : 'Custom schema will sync with this space.'}
+              {isSaving
+                ? 'Syncing schema with space...'
+                : isDefault
+                ? 'Viewing default schema'
+                : 'Custom schema will sync with this space.'}
             </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 rounded-xl"
+                disabled={isSaving}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Close
               </button>
@@ -454,11 +550,26 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="px-4 py-2 bg-lad-600 hover:bg-lad-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5"
+                  disabled={isSaving}
+                  aria-busy={isSaving}
+                  className={`px-4 py-2 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all ${
+                    isSaving
+                      ? 'bg-lad-400 dark:bg-lad-800 cursor-not-allowed opacity-80'
+                      : 'bg-lad-600 hover:bg-lad-700 cursor-pointer active:scale-95'
+                  }`}
                   data-testid="save-card-type-button"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Save Card Type</span>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" data-testid="save-card-type-spinner" />
+                      <span>Saving Card Type...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save Card Type</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
