@@ -1,0 +1,386 @@
+{
+  "app": {
+    "title": "LAD Board",
+    "tagline": "Living Active Dynamic Board",
+    "version": "v0.1.0",
+    "standardVersion": "LAD Standard 1.0",
+    "offlineBadge": "Offline Mode",
+    "installPwa": "Install App"
+  },
+  "nav": {
+    "hub": "Main Hub",
+    "board": "Space Board",
+    "attention": "Needs Attention",
+    "time": "Calendar",
+    "graph": "Network & Sharing",
+    "objects": "All Items",
+    "people": "People",
+    "history": "Activity History",
+    "settings": "Settings"
+  },
+  "sync": {
+    "synced": "Saved & Synced",
+    "savedLocally": "Saved on device",
+    "offline": "Offline",
+    "pendingChanges": "{count} pending sync",
+    "needsAttention": "Sync needs attention",
+    "conflictDetected": "Conflict detected",
+    "syncNow": "Sync Now",
+    "lastSynced": "Last synced: {time}",
+    "neverSynced": "Not synced yet"
+  },
+  "spaces": {
+    "title": "Spaces",
+    "currentSpace": "Active Space",
+    "switchSpace": "Switch Space",
+    "createNew": "Create Space",
+    "spaceName": "Space Name",
+    "spaceDescription": "Description",
+    "createButton": "Create Space",
+    "inviteMember": "Invite Someone",
+    "inviteEmail": "Google Email Address",
+    "sendInvite": "Send Invite",
+    "status": "Status",
+    "members": "Members",
+    "objectsCount": "{count} items",
+    "storagePath": "Storage Location",
+    "unavailable": "Space Unavailable",
+    "unavailableDesc": "Could not access this Space.",
+    "tryAgain": "Try Again",
+    "keepForLater": "Keep for Later",
+    "remove": "Remove from Device"
+  },
+  "capture": {
+    "placeholder": "Type anything... (e.g. Doctor says continue meds, blood test in 2 weeks, dad schedules follow-up)",
+    "quickCapture": "Quick Add",
+    "textTab": "Quick Note",
+    "cardsTab": "Guided Card",
+    "submit": "Save Item",
+    "processing": "Understanding...",
+    "inferredHeader": "What LAD understood (click to tweak)",
+    "title": "Title",
+    "domain": "Category",
+    "dueDate": "Due / Date",
+    "assignedTo": "Person",
+    "priority": "Priority",
+    "tags": "Tags",
+    "confirmAndSave": "Save to Board",
+    "cancel": "Cancel",
+    "discard": "Discard",
+    "quickStartersLabel": "Quick Starters:",
+    "quickStarters": {
+      "medication": "+ Health Note",
+      "balance": "+ Bank Balance",
+      "shopping": "+ Shopping Item",
+      "appointment": "+ Appointment"
+    },
+    "quickStartersText": {
+      "medication": "Doctor says continue blood pressure meds, follow up in 2 weeks",
+      "balance": "Checking account balance is $3,250 as of today",
+      "shopping": "Need to buy organic milk and whole wheat bread",
+      "appointment": "Dentist appointment scheduled for tomorrow at 3pm"
+    },
+    "domains": {
+      "health": "Health",
+      "finances": "Money",
+      "documents": "Documents",
+      "home": "Home",
+      "shopping": "Shopping",
+      "projects": "Projects",
+      "general": "General"
+    },
+    "priorities": {
+      "low": "Low",
+      "medium": "Normal",
+      "high": "Important",
+      "urgent": "Urgent"
+    }
+  },
+  "active": {
+    "title": "Things to Check",
+    "subtitle": "LAD reminds you about stale balances, upcoming dates, and open items.",
+    "empty": "All clear! Nothing needs your attention right now.",
+    "staleBalance": "Bank balance hasn't been updated for {days} days.",
+    "staleBalanceAction": "Update Balance",
+    "upcomingAppointment": "Coming up soon: {title}",
+    "unresolvedShopping": "Shopping item waiting for {days} days.",
+    "pendingFollowUp": "Follow-up due: {title}",
+    "agentApprovalRequired": "Assistant '{agent}' asked for your permission to make a change.",
+    "approve": "Approve",
+    "reject": "Decline",
+    "dismiss": "Dismiss",
+    "snooze": "Remind Me Tomorrow",
+    "attentionCount": "{count} things need checking"
+  },
+  "demo": {
+    "bannerTitle": "Fresh Space? Try some sample items to see LAD in action",
+    "loadDemo": "Load Sample Items",
+    "demoLoaded": "Sample items added to your Space!"
+  },
+  "boardView": {
+    "focusTitle": "Today's Focus",
+    "allCategories": "All Categories",
+    "addItem": "Add item",
+    "emptyCategory": "No items in this category yet. Type above to add one!"
+  },
+  "timeView": {
+    "title": "Timeline",
+    "subtitle": "See what is scheduled for today, tomorrow, and upcoming days.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow",
+    "upcoming": "Upcoming",
+    "recent": "Recent",
+    "past": "Past",
+    "noItems": "Nothing scheduled for this time."
+  },
+  "graphView": {
+    "title": "Network & Sharing Rules",
+    "subtitle": "See how people, items, and reminders connect, and who gets notified.",
+    "nodesCount": "{count} Items & People",
+    "edgesCount": "{count} Connections",
+    "nodeDetails": "Item Details",
+    "edgeDetails": "Sharing & Notification Rule",
+    "policyHeader": "When something changes:",
+    "addNode": "Add Person / Item",
+    "addEdge": "Connect Two Items",
+    "notificationRule": "Send notification on change",
+    "domainSpecificity": "Category Specific Rule",
+    "inherited": "Using default rule",
+    "explicit": "Custom rule",
+    "filterNodes": "Filter..."
+  },
+  "peopleView": {
+    "title": "People & Sharing",
+    "subtitle": "See everyone who has access to this Space and invite new people.",
+    "membersList": "People in this Space",
+    "pendingInvitations": "Pending Invites",
+    "roleOwner": "Owner",
+    "roleEditor": "Can Edit",
+    "roleViewer": "Can View",
+    "inviteUser": "Invite a Person",
+    "invitationSent": "Invitation sent successfully!",
+    "acceptInvitation": "Accept",
+    "declineInvitation": "Decline"
+  },
+  "historyView": {
+    "title": "Activity History",
+    "subtitle": "A simple list of every change made in this Space.",
+    "operationId": "Change ID",
+    "actor": "Person",
+    "timestamp": "Time",
+    "type": "Action",
+    "target": "Item",
+    "changes": "Details",
+    "revert": "Undo Change",
+    "searchOps": "Search activity..."
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage your account, storage, and how LAD works for you.",
+    "identitySection": "Your Identity",
+    "userId": "Your ID",
+    "googleAuth": "Google Account",
+    "notConnected": "Not Connected",
+    "connectedAs": "Signed in as {email}",
+    "signInGoogle": "Sign In with Google",
+    "signOut": "Sign Out",
+    "demoMode": "Local Demo Mode",
+    "switchDemo": "Use Demo Mode",
+    "storageSection": "Where your data lives",
+    "storageProvider": "Storage Provider",
+    "localIndexedDb": "On this device (Offline)",
+    "googleDrive": "Google Drive (Cloud Sync)",
+    "gdriveFolder": "Google Drive Folder",
+    "clientIdLabel": "Google Client ID (Optional)",
+    "clientIdPlaceholder": "Paste your Google Client ID here",
+    "timingSection": "Reminders & Autosave",
+    "commitThreshold": "Save Delay (seconds)",
+    "commitThresholdDesc": "How long after you stop typing before your change is permanently saved (default: 5s).",
+    "activeInterval": "Check Interval (seconds)",
+    "activeIntervalDesc": "How often LAD checks for upcoming dates and stale items in the background.",
+    "localizationSection": "Language",
+    "selectLanguage": "Language",
+    "paletteSection": "Cognitive Color Palette",
+    "paletteSubtitle": "Soothing, scientifically tuned color themes designed for sensory regulation, ADHD focus, and autism-friendly clarity.",
+    "palettes": {
+      "ocean": {
+        "name": "Ocean Calm (Default)",
+        "desc": "Deep sapphire and sky accents. Clear, grounding, and non-distracting."
+      },
+      "sage": {
+        "name": "Serene Sage",
+        "desc": "Soft forest and eucalyptus greens. Soothing and anxiety-reducing."
+      },
+      "amber": {
+        "name": "Warm Sunset",
+        "desc": "Gentle terracotta and warm amber. Reduces blue-light strain."
+      },
+      "lavender": {
+        "name": "Soft Iris",
+        "desc": "Muted royal lavender and lilac mist. Promotes gentle focus."
+      },
+      "minimal": {
+        "name": "Minimal Slate",
+        "desc": "Neutral graphite and steel. Low-stimulus, zero clutter."
+      }
+    },
+    "saveSettings": "Save Settings",
+    "savedSuccess": "Settings saved!"
+  },
+  "onboarding": {
+    "step1": {
+      "badge": "Step 1 of 2",
+      "title": "Welcome to LAD Board",
+      "subtitle": "A calm, living workspace engineered for natural cognitive flow and zero overload.",
+      "nameLabel": "What should we call you?",
+      "namePlaceholder": "e.g. Alex Henderson",
+      "emailLabel": "Google Account Email",
+      "emailHint": "Optional — connects your private Google Drive for encrypted cloud sync.",
+      "emailPlaceholder": "e.g. alex@gmail.com",
+      "continueButton": "Continue to Spaces"
+    },
+    "step2": {
+      "badge": "Step 2 of 2",
+      "title": "Create your first Space",
+      "subtitle": "Spaces keep your life domains cleanly separated, distraction-free, and private.",
+      "presetsLabel": "Choose a recommended template:",
+      "personal": {
+        "title": "Personal Life",
+        "desc": "Health notes, personal finances, daily tasks, and private documents."
+      },
+      "family": {
+        "title": "Family & Household",
+        "desc": "Shared family logistics, home maintenance, medical follow-ups, and expenses."
+      },
+      "work": {
+        "title": "Work & Projects",
+        "desc": "Client deliverables, strategic goals, meeting action items, and project boards."
+      },
+      "custom": {
+        "title": "Or name your own space...",
+        "desc": "Create a fully customized space tailored to your specific workflow.",
+        "nameLabel": "Space Name",
+        "namePlaceholder": "e.g. Research Lab, Art Studio, Freelance...",
+        "descLabel": "Purpose (Optional)",
+        "descPlaceholder": "e.g. Daily tracking for my PhD thesis"
+      },
+      "backButton": "Back",
+      "finishButton": "Enter LAD Board",
+      "creating": "Preparing your space..."
+    }
+  },
+  "createSpaceView": {
+    "badge": "New Workspace",
+    "title": "Create a New Space",
+    "subtitle": "Spaces keep your life domains cleanly separated, distraction-free, and private.",
+    "chooseTemplate": "Choose a recommended template or build a custom space:",
+    "personal": {
+      "title": "Personal Life",
+      "desc": "Health notes, personal finances, daily tasks, and private documents."
+    },
+    "family": {
+      "title": "Family & Household",
+      "desc": "Shared family logistics, home maintenance, medical follow-ups, and expenses."
+    },
+    "work": {
+      "title": "Work & Projects",
+      "desc": "Client deliverables, strategic goals, meeting action items, and project boards."
+    },
+    "custom": {
+      "title": "Custom Space",
+      "desc": "Create a fully customized space tailored to your specific workflow.",
+      "nameLabel": "Space Name",
+      "namePlaceholder": "e.g. Research Lab, Art Studio, Freelance...",
+      "descLabel": "Purpose / Description (Optional)",
+      "descPlaceholder": "e.g. Daily tracking for experiments and research papers",
+      "iconLabel": "Space Icon",
+      "colorLabel": "Base Color Accent"
+    },
+    "cancel": "Cancel",
+    "back": "Back",
+    "createButton": "Create Space",
+    "creating": "Creating space..."
+  },
+  "hub": {
+    "greetingMorning": "Good morning, {name} 👋",
+    "greetingAfternoon": "Good afternoon, {name} 👋",
+    "greetingEvening": "Good evening, {name} 👋",
+    "greetingDefault": "Welcome, {name} 👋",
+    "spacePrompt": "Which Space are we focusing on today?",
+    "attentionHeader": "Things needing your attention right now",
+    "doorwayHomeTitle": "Space Home Dashboard",
+    "doorwayHomeDesc": "View the overall board for {space}, add quick items, and check the timeline.",
+    "doorwayTopicTitle": "Explore by Topic",
+    "doorwayTopicDesc": "Jump into focused cockpits: Health, Money, Shopping, Home & Projects.",
+    "selectTopicPrompt": "Choose a topic to focus on:",
+    "allClear": "All clear! Nothing urgent right now.",
+    "openDashboard": "Open Dashboard",
+    "chooseTopic": "Select Topic",
+    "recentItems": "Recent & Key Items",
+    "noItemsInSpace": "Fresh and ready • Add your first item",
+    "spaceNavPrev": "Previous Space",
+    "spaceNavNext": "Next Space",
+    "spaceCount": "{current} of {total}",
+    "enterSpace": "Enter {space}"
+  },
+  "topics": {
+    "title": "Topic Dashboard",
+    "backToHub": "Back to Hub",
+    "itemsCount": "{count} items in {topic}",
+    "searchPlaceholder": "Search in {topic}...",
+    "allSubcategories": "All",
+    "emptyTopic": "No items in {topic} yet for this Space. Add one using the button above!",
+    "labels": {
+      "health": "Health & Medical",
+      "finances": "Money & Accounts",
+      "shopping": "Shopping List",
+      "home": "Home & Household",
+      "documents": "Documents & IDs",
+      "projects": "Projects & Tasks",
+      "general": "General Notes"
+    },
+    "descriptions": {
+      "health": "Medications, checkups, doctor notes, and vitals",
+      "finances": "Bank balances, bills, subscriptions, and budgets",
+      "shopping": "Groceries, household supplies, and items to buy",
+      "home": "Repairs, appliances, warranties, and chores",
+      "documents": "Passports, contracts, IDs, and records",
+      "projects": "Active goals, milestones, and collaborative tasks",
+      "general": "Quick thoughts, uncategorized notes, and reminders"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "close": "Close",
+    "back": "Back",
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Try Again",
+    "success": "Success",
+    "search": "Search items...",
+    "filter": "Filter",
+    "actions": "Actions",
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "unknown": "Unknown",
+    "done": "Done",
+    "cancel": "Cancel"
+  },
+  "card": {
+    "editCard": "Edit Card",
+    "titlePlaceholder": "Item title...",
+    "notesPlaceholder": "Add notes or details...",
+    "dueDateLabel": "Due Date / Date",
+    "quickToday": "Today",
+    "quickTomorrow": "Tomorrow",
+    "quickNextWeek": "+1 Week",
+    "clearDate": "Clear Date",
+    "balanceLabel": "Balance ($)",
+    "assignedToLabel": "Assigned to",
+    "priorityLabel": "Priority"
+  }
+}

@@ -1,0 +1,255 @@
+/**
+ * Main Application Component for LAD Board (v0.1.0)
+ * Featuring Cognitive Hub Landing, Topic Dashboards, and Visual Capture
+ */
+
+import React, { useState, useEffect } from 'react';
+import { LADProvider, useLAD } from './context/LADContext';
+import { I18nProvider } from '../core/i18n/i18n-context';
+import { Header } from './components/Header';
+import { Navigation, ActiveTab } from './components/Navigation';
+import { CaptureModal } from './components/CaptureModal';
+import { SpaceManagerModal } from './components/SpaceManagerModal';
+import { OnboardingView } from './views/OnboardingView';
+import { HubLandingView } from './views/HubLandingView';
+import { TopicDashboardView } from './views/TopicDashboardView';
+import { LivingBoardView } from './views/LivingBoardView';
+import { AttentionView } from './views/AttentionView';
+import { TimeView } from './views/TimeView';
+import { GraphView } from './views/GraphView';
+import { PeopleView } from './views/PeopleView';
+import { HistoryView } from './views/HistoryView';
+import { SettingsView } from './views/SettingsView';
+import { CreateSpaceView } from './views/CreateSpaceView';
+
+import { motion, AnimatePresence, Variants } from 'framer-motion';
+
+const pageVariants: Variants = {
+  initial: { opacity: 0, y: 10, filter: 'blur(3px)' },
+  animate: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.38,
+      ease: [0.16, 1, 0.3, 1],
+    },
+  },
+  exit: {
+    opacity: 0,
+    y: -8,
+    filter: 'blur(2px)',
+    transition: {
+      duration: 0.22,
+      ease: [0.16, 1, 0.3, 1],
+    },
+  },
+};
+
+const AppContent: React.FC = () => {
+  const { activeAlerts, proposals, isLoading, userRegistry } = useLAD();
+  const [activeTab, setActiveTab] = useState<ActiveTab>('hub');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('health');
+  const [captureModalOpen, setCaptureModalOpen] = useState(false);
+  const [captureDomain, setCaptureDomain] = useState<string | undefined>(undefined);
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check if first-run onboarding is needed
+  useEffect(() => {
+    if (!isLoading && userRegistry) {
+      const isCompleted = localStorage.getItem('lad_onboarded') === 'true';
+      const hasCustomName =
+        userRegistry.identities[0]?.display_name &&
+        userRegistry.identities[0].display_name !== 'LAD User';
+      if (!isCompleted && !hasCustomName) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [isLoading, userRegistry]);
+
+  const attentionCount = activeAlerts.length + proposals.length;
+
+  const handleOpenCapture = (domain?: string) => {
+    setCaptureDomain(domain);
+    setCaptureModalOpen(true);
+  };
+
+  const handleSelectTopic = (topicId: string) => {
+    setSelectedTopicId(topicId);
+    setActiveTab('topic');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center gap-3"
+        >
+          <motion.div
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-xl flex items-center justify-center shadow-xl shadow-blue-500/20"
+          >
+            LAD
+          </motion.div>
+          <div className="text-xs font-bold text-slate-500 tracking-wide">Living Active Dynamic Board</div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const currentKey = activeTab === 'topic' ? `topic_${selectedTopicId}` : activeTab;
+  const isFullPageHub = activeTab === 'hub';
+
+  if (showOnboarding) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="onboarding_view"
+          variants={pageVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          className="w-full min-h-screen"
+        >
+          <OnboardingView onComplete={() => setShowOnboarding(false)} />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-hidden flex flex-col bg-slate-50/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-500">
+      {/* Global Ambient Background Atmosphere */}
+      <div className="absolute inset-0 bg-mesh-pattern bg-radial-vignette pointer-events-none opacity-50 dark:opacity-30" />
+      <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 -right-32 w-80 h-80 rounded-full bg-teal-500/10 dark:bg-purple-600/10 blur-[130px] pointer-events-none" />
+
+      <AnimatePresence mode="wait">
+        {activeTab === 'create_space' ? (
+          <motion.div
+            key="full_create_space"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="w-full flex-1 relative z-10"
+          >
+            <CreateSpaceView
+              onComplete={() => setActiveTab('board')}
+              onCancel={() => setActiveTab('hub')}
+            />
+          </motion.div>
+        ) : isFullPageHub ? (
+          <motion.div
+            key="full_hub"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="w-full flex-1 relative z-10"
+          >
+            <HubLandingView
+              onOpenHomeDashboard={() => setActiveTab('board')}
+              onSelectTopic={handleSelectTopic}
+              onOpenCapture={() => handleOpenCapture()}
+              onOpenSpaceManager={() => setSpaceModalOpen(true)}
+              onOpenCreateSpace={() => setActiveTab('create_space')}
+              onOpenSettings={() => setActiveTab('global_settings')}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="workspace_cockpit"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="w-full flex-1 flex flex-col min-h-screen"
+          >
+            {/* Space Cockpit Header */}
+            <Header
+              onOpenCapture={() => handleOpenCapture(activeTab === 'topic' ? selectedTopicId : undefined)}
+              onOpenSpaceManager={() => setSpaceModalOpen(true)}
+              onOpenCreateSpace={() => setActiveTab('create_space')}
+              onOpenSettings={() => setActiveTab('settings')}
+              onGoToHub={() => setActiveTab('hub')}
+            />
+
+            <div className="flex-1 flex max-w-7xl w-full mx-auto">
+              {/* Responsive Navigation Sidebar */}
+              <Navigation
+                activeTab={activeTab}
+                onSelectTab={setActiveTab}
+                attentionCount={attentionCount}
+              />
+
+              {/* Space Dashboard View Area */}
+              <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 overflow-y-auto max-w-5xl">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentKey}
+                    variants={pageVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className="w-full"
+                  >
+                    {activeTab === 'topic' && (
+                      <TopicDashboardView
+                        topicId={selectedTopicId}
+                        onBackToHub={() => setActiveTab('hub')}
+                        onOpenCapture={(dom) => handleOpenCapture(dom || selectedTopicId)}
+                      />
+                    )}
+                    {activeTab === 'board' && <LivingBoardView />}
+                    {activeTab === 'attention' && <AttentionView />}
+                    {activeTab === 'time' && <TimeView />}
+                    {activeTab === 'graph' && <GraphView />}
+                    {activeTab === 'people' && <PeopleView />}
+                    {activeTab === 'history' && <HistoryView />}
+                    {activeTab === 'settings' && <SettingsView initialTab="space" />}
+                    {activeTab === 'global_settings' && <SettingsView initialTab="global" />}
+                  </motion.div>
+                </AnimatePresence>
+              </main>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Quick Add / Guided Capture Modal */}
+      <CaptureModal
+        isOpen={captureModalOpen}
+        defaultDomain={captureDomain}
+        onClose={() => {
+          setCaptureModalOpen(false);
+          setCaptureDomain(undefined);
+        }}
+      />
+
+      {/* Space Switcher & Invites Modal */}
+      <SpaceManagerModal
+        isOpen={spaceModalOpen}
+        onClose={() => setSpaceModalOpen(false)}
+        onOpenCreateSpace={() => setActiveTab('create_space')}
+      />
+    </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <I18nProvider>
+      <LADProvider>
+        <AppContent />
+      </LADProvider>
+    </I18nProvider>
+  );
+};
+
+export default App;
