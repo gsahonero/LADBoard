@@ -19,7 +19,7 @@ If you wish to sync your Spaces across devices using your own Google Drive:
 4. **Configure OAuth Consent Screen**:
    - Choose **External** (or Internal for Google Workspace).
    - Fill in App Name (`LAD Board`) and User Support Email.
-   - Add Scope: `https://www.googleapis.com/auth/drive.file` (Per-file access, highly secure).
+   - Add Scope: `https://www.googleapis.com/auth/drive` (allows multi-user space sharing and sync) or `https://www.googleapis.com/auth/drive.file`.
    - Add your Google account under **Test Users**.
 5. **Create OAuth Client ID**:
    - Navigate to *APIs & Services > Credentials > Create Credentials > OAuth client ID*.

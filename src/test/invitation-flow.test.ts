@@ -157,4 +157,41 @@ describe('Space Invitation & Strict Identity Verification Flow', () => {
     expect(verification.isValid).toBe(true);
     expect(verification.role).toBe('editor');
   });
+
+  it('allows joining an invited space and sets membership directly without creating a new space', async () => {
+    const storage = new MemoryStorageProvider();
+    const manager = new SpaceManager(storage);
+
+    // 1. Inviter creates space & invites user
+    const manifest = await manager.createSpace({
+      spaceName: 'Shared Family Space',
+      createdByUserId: 'usr_inviter_01',
+    });
+
+    await manager.createInvitation(
+      manifest.space_id,
+      'usr_inviter_01',
+      'member@gmail.com',
+      'editor',
+      'Family Member'
+    );
+
+    // 2. Joining member loads space
+    const loaded = await manager.loadSpace(
+      manifest.space_id,
+      'usr_member_02',
+      5000,
+      'Shared Family Space',
+      'Family Member',
+      'member@gmail.com'
+    );
+
+    expect(loaded.manifest.space_id).toBe(manifest.space_id);
+    expect(loaded.manifest.space_name).toBe('Shared Family Space');
+
+    // Ensure user node is registered as collaborator
+    const memberNode = loaded.graphStore.getNodes().find((n) => n.metadata?.email === 'member@gmail.com');
+    expect(memberNode).toBeDefined();
+    expect(memberNode?.label).toBe('Family Member');
+  });
 });

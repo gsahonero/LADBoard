@@ -252,14 +252,22 @@ export class SpaceManager {
     invitedName?: string
   ): Promise<LADInvitation> {
     const space = await this.loadSpace(spaceId, invitedByUserId);
-    const invId = `inv_${Math.random().toString(36).substring(2, 10)}`;
-    const displayName = invitedName?.trim() || invitedEmail.split('@')[0];
+    const rawName = invitedName?.trim();
+    let displayName = rawName;
+    if (!displayName) {
+      const prefix = invitedEmail.split('@')[0];
+      const parts = prefix.split(/[._-]/).filter(Boolean);
+      displayName = parts.length > 0
+        ? parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+        : prefix;
+    }
 
+    const invId = 'inv_' + Math.random().toString(36).substring(2, 10);
     const invitation: LADInvitation = {
       invitation_id: invId,
       space_id: spaceId,
       invited_by: invitedByUserId,
-      invited_name: invitedName?.trim() || undefined,
+      invited_name: rawName || undefined,
       invited_email: invitedEmail,
       role,
       status: 'invited',
@@ -279,6 +287,7 @@ export class SpaceManager {
           ...existingNode.metadata,
           invitation_id: invId,
           name: displayName,
+          invited_name: rawName || undefined,
           email: invitedEmail,
           status: 'invited',
           role,
@@ -292,6 +301,7 @@ export class SpaceManager {
         {
           invitation_id: invId,
           name: displayName,
+          invited_name: rawName || undefined,
           email: invitedEmail,
           status: 'invited',
           role,

@@ -13,6 +13,7 @@ import {
   X,
   Loader2,
   Lock,
+  RotateCcw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -32,6 +33,41 @@ export const JoinSpaceModal: React.FC = () => {
   const [isJoining, setIsJoining] = useState(false);
   const [verification, setVerification] = useState<SpaceInviteVerificationResult | null>(null);
 
+  const isGoogleAuth = auth.isAuthenticated && auth.user?.provider === 'google';
+  const currentUserEmail = auth.user?.email || '';
+
+  const runVerification = React.useCallback(
+    async (overrideStorage?: any) => {
+      if (!pendingJoinSpaceId) {
+        setVerification(null);
+        return;
+      }
+
+      const currentAuth = authService.getState();
+      if (!currentAuth.isAuthenticated || currentAuth.user?.provider !== 'google') {
+        setVerification(null);
+        return;
+      }
+
+      setIsVerifying(true);
+      const userEmail = currentAuth.user?.email || '';
+      const storage = overrideStorage || storageManager.getRemoteProvider() || storageManager.getLocalProvider();
+      
+      try {
+        const result = await validateSpaceAccessAndInvitation(storage, pendingJoinSpaceId, userEmail);
+        setVerification(result);
+      } catch (err: any) {
+        setVerification({
+          isValid: false,
+          error: err.message || 'SPACE_UNAVAILABLE',
+        });
+      } finally {
+        setIsVerifying(false);
+      }
+    },
+    [pendingJoinSpaceId, authService, storageManager]
+  );
+
   useEffect(() => {
     return authService.subscribe((newAuth) => {
       setAuth(newAuth);
@@ -44,34 +80,24 @@ export const JoinSpaceModal: React.FC = () => {
       return;
     }
 
-    let isCancelled = false;
-
-    async function verify() {
-      setIsVerifying(true);
-      const userEmail = auth.user?.email || '';
-      const storage = storageManager.getRemoteProvider() || storageManager.getLocalProvider();
-      const result = await validateSpaceAccessAndInvitation(storage, pendingJoinSpaceId!, userEmail);
-
-      if (!isCancelled) {
-        setVerification(result);
-        setIsVerifying(false);
-      }
+    if (isGoogleAuth) {
+      runVerification();
     }
-
-    verify();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [pendingJoinSpaceId, auth.user?.email, storageManager]);
-
-  if (!pendingJoinSpaceId) return null;
-
-  const isGoogleAuth = auth.isAuthenticated && auth.user?.provider === 'google';
-  const currentUserEmail = auth.user?.email || '';
+  }, [pendingJoinSpaceId, isGoogleAuth, runVerification]);
 
   const handleGoogleLogin = async () => {
-    await connectGoogleDrive();
+    try {
+      setIsVerifying(true);
+      const user = await connectGoogleDrive();
+      if (user) {
+        const storage = storageManager.getRemoteProvider() || storageManager.getLocalProvider();
+        await runVerification(storage);
+      }
+    } catch {
+      // Handled in context
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleAcceptJoin = async () => {
@@ -267,10 +293,18 @@ export const JoinSpaceModal: React.FC = () => {
                 </p>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col gap-2.5">
+                <button
+                  onClick={() => runVerification()}
+                  className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>{t('joinModal.retryVerification')}</span>
+                </button>
+
                 <button
                   onClick={dismissPendingJoinSpace}
-                  className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer"
+                  className="w-full py-2.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer"
                 >
                   {t('common.close')}
                 </button>

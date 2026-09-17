@@ -143,7 +143,7 @@ export class AuthService {
         this.tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope:
-            'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events email profile openid',
+            'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse.error) {
               this.state = {
@@ -201,19 +201,20 @@ export class AuthService {
             }
           },
           error_callback: (err: any) => {
+            const isPopupClosed = err?.type === 'popup_closed' || err?.message?.includes('closed');
             this.state = {
               isAuthenticated: false,
               user: null,
               isLoading: false,
-              error: err?.message || 'Google OAuth prompt was cancelled',
+              error: isPopupClosed ? 'Google Sign-In prompt was closed.' : (err?.message || 'Google OAuth prompt was cancelled'),
             };
             this.notify();
             reject(new Error(this.state.error!));
           },
         });
 
-        // Trigger Google OAuth popup dialog
-        this.tokenClient.requestAccessToken({ prompt: 'consent' });
+        // Trigger Google OAuth dialog
+        this.tokenClient.requestAccessToken({ prompt: '' });
       } catch (err: any) {
         this.state = {
           isAuthenticated: false,

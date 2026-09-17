@@ -69,4 +69,48 @@ describe('Google Drive REST API v3 Storage Provider', () => {
     const data = await provider.readFile('LAD/spc_01/manifest.json');
     expect(data).toEqual({ lad_standard: '1.0', space_id: 'spc_01' });
   });
+
+  it('resolves space folder directly inside LAD root without redundant LAD/LAD nesting', async () => {
+    const createdFolders: { name: string; parents?: string[] }[] = [];
+
+    const mockFetch = vi.fn().mockImplementation(async (url: string, init?: any) => {
+      const decodedUrl = decodeURIComponent(url);
+      if (decodedUrl.includes('drive/v3/files?q=') && !init?.method) {
+        if (decodedUrl.includes("name = 'LAD'")) {
+          return {
+            ok: true,
+            json: async () => ({ files: [{ id: 'mock_lad_root_folder_id', name: 'LAD' }] }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ files: [] }),
+        };
+      }
+
+      if (init?.method === 'POST') {
+        const body = JSON.parse(init.body);
+        createdFolders.push(body);
+        return {
+          ok: true,
+          json: async () => ({ id: `mock_folder_${body.name}`, name: body.name }),
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    global.fetch = mockFetch;
+
+    const provider = new GDriveStorageProvider({
+      accessToken: 'mock_token_123',
+    });
+
+    const folderId = await provider.resolveFolderPath('LAD/spc_test_nested');
+    expect(folderId).toBe('mock_folder_spc_test_nested');
+
+    // Ensure it created 'spc_test_nested' with parent 'mock_lad_root_folder_id' and NEVER created a subfolder named 'LAD'
+    expect(createdFolders.some((f) => f.name === 'LAD')).toBe(false);
+    expect(createdFolders.some((f) => f.name === 'spc_test_nested' && f.parents?.includes('mock_lad_root_folder_id'))).toBe(true);
+  });
 });

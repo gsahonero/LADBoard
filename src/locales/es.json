@@ -470,6 +470,7 @@
     "acceptButton": "Aceptar Invitación y Unirse al Espacio",
     "decline": "Rechazar Invitación",
     "notFoundTitle": "Espacio No Disponible",
-    "notFoundDesc": "No se pudo acceder a este Espacio. El espacio puede haber sido eliminado o los permisos de Google Drive aún no se han propagado."
+    "notFoundDesc": "No se pudo acceder a este Espacio. El espacio puede haber sido eliminado o los permisos de Google Drive aún no se han propagado.",
+    "retryVerification": "Reintentar Verificación"
   }
 }

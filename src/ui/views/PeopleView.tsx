@@ -167,27 +167,23 @@ export const PeopleView: React.FC = () => {
             const role = user.metadata?.role || 'member';
             const isInvited = user.metadata?.status === 'invited';
 
-            const isCurrentUser =
-              user.node_id === `node_${userRegistry?.user_id}` ||
-              user.node_id === userRegistry?.user_id ||
-              user.ref_id === userRegistry?.user_id ||
-              role === 'owner';
-
-            // Resolve real user display name
-            let userName = user.metadata?.name || user.label;
-            if (isCurrentUser) {
-              if (auth.isAuthenticated && auth.user?.name) {
-                userName = auth.user.name;
-              } else if (
-                userRegistry?.identities[0]?.display_name &&
-                (userName === 'Current User' || userName === 'Owner' || !userName)
-              ) {
-                userName = userRegistry.identities[0].display_name;
-              }
-            }
-
             // Resolve user email
             let userEmail: string | undefined;
+            if (user.metadata?.email && user.metadata.email !== 'user@ladboard.local') {
+              userEmail = user.metadata.email;
+            } else if (user.label.includes('@') && !user.label.endsWith('@ladboard.local')) {
+              userEmail = user.label;
+            }
+
+            // Accurate isCurrentUser check (must NOT falsely flag invited owners as current local user)
+            const isCurrentUser =
+              !isInvited &&
+              (user.node_id === `node_${userRegistry?.user_id}` ||
+                user.node_id === userRegistry?.user_id ||
+                user.ref_id === userRegistry?.user_id ||
+                (Boolean(auth.isAuthenticated && auth.user?.email && userEmail) &&
+                  userEmail?.toLowerCase() === auth.user?.email?.toLowerCase()));
+
             if (isCurrentUser) {
               if (auth.isAuthenticated && auth.user?.email) {
                 userEmail = auth.user.email;
@@ -196,27 +192,60 @@ export const PeopleView: React.FC = () => {
                 userRegistry.identities[0].email !== 'user@ladboard.local'
               ) {
                 userEmail = userRegistry.identities[0].email;
-              } else if (user.metadata?.email && user.metadata.email !== 'user@ladboard.local') {
-                userEmail = user.metadata.email;
               }
+            }
+
+            // Consistent display name resolution
+            let userName: string;
+            if (isCurrentUser) {
+              userName =
+                (auth.isAuthenticated && auth.user?.name) ||
+                userRegistry?.identities[0]?.display_name ||
+                (user.metadata?.name && user.metadata.name !== 'Current User' && user.metadata.name !== 'Owner'
+                  ? user.metadata.name
+                  : undefined) ||
+                (user.label && !user.label.includes('@') && user.label !== 'Current User' && user.label !== 'Owner'
+                  ? user.label
+                  : 'You');
             } else {
-              if (user.metadata?.email && user.metadata.email !== 'user@ladboard.local') {
-                userEmail = user.metadata.email;
-              } else if (user.label.includes('@') && !user.label.endsWith('@ladboard.local')) {
-                userEmail = user.label;
+              // For invited or other collaborators:
+              // Strictly prioritize the entered name (invited_name or metadata.name or clean label)
+              const candidate =
+                user.metadata?.invited_name ||
+                (user.metadata?.name && user.metadata.name !== 'Current User' && user.metadata.name !== 'Owner'
+                  ? user.metadata.name
+                  : undefined) ||
+                (user.label && !user.label.includes('@') && user.label !== 'Current User' && user.label !== 'Owner'
+                  ? user.label
+                  : undefined);
+
+              if (candidate && candidate.trim()) {
+                userName = candidate.trim();
+              } else if (userEmail) {
+                // If only email was provided (e.g. sarah.connor@gmail.com), format a clean name: Sarah Connor
+                const prefix = userEmail.split('@')[0];
+                const parts = prefix.split(/[._-]/).filter(Boolean);
+                userName =
+                  parts.length > 0
+                    ? parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+                    : prefix;
+              } else {
+                userName = user.label || 'Collaborator';
               }
             }
 
             const displayEmail = userEmail || t('peopleView.noRegisteredEmail');
             const hasEmail = Boolean(userEmail);
 
-            const initials = (userName || 'U')
-              .split(' ')
-              .map((p: string) => p[0])
-              .filter(Boolean)
-              .join('')
-              .substring(0, 2)
-              .toUpperCase();
+            const cleanedForInitials = userName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+            const initials =
+              (cleanedForInitials || 'U')
+                .split(/\s+/)
+                .map((p: string) => p[0])
+                .filter(Boolean)
+                .join('')
+                .substring(0, 2)
+                .toUpperCase() || 'U';
 
             return (
               <div

@@ -470,6 +470,7 @@
     "acceptButton": "Accept Invitation & Join Space",
     "decline": "Decline Invitation",
     "notFoundTitle": "Space Unavailable",
-    "notFoundDesc": "Could not access this Space. The space may have been deleted or Google Drive permissions have not yet propagated."
+    "notFoundDesc": "Could not access this Space. The space may have been deleted or Google Drive permissions have not yet propagated.",
+    "retryVerification": "Re-check Access"
   }
 }

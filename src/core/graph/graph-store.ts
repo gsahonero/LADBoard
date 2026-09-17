@@ -152,8 +152,25 @@ export class GraphStore {
     label: string,
     metadata?: Record<string, any>
   ): Promise<LADGraphNode> {
-    const existing = Array.from(this.nodes.values()).find((n) => n.ref_id === entityId);
-    if (existing) return existing;
+    const existing = Array.from(this.nodes.values()).find(
+      (n) => n.ref_id === entityId || n.node_id === `node_${entityId}`
+    );
+    if (existing) {
+      const hasLabelChange = label && existing.label !== label;
+      const hasMetaChange = metadata && Object.keys(metadata).some((k) => existing.metadata?.[k] !== metadata[k]);
+      if (hasLabelChange || hasMetaChange) {
+        const updated = await this.updateNode(existing.node_id, {
+          label: label || existing.label,
+          metadata: {
+            ...existing.metadata,
+            ...(metadata || {}),
+            ...(label ? { name: label } : {}),
+          },
+        });
+        return updated || existing;
+      }
+      return existing;
+    }
 
     const nodeId = `node_${entityId}`;
     const newNode: LADGraphNode = {

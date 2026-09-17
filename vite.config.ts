@@ -6,6 +6,11 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   base: './', // Relative base for GitHub Pages and static hosting
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

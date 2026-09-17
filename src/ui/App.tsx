@@ -49,7 +49,7 @@ const pageVariants: Variants = {
 };
 
 const AppContent: React.FC = () => {
-  const { activeAlerts, proposals, isLoading, userRegistry } = useLAD();
+  const { activeAlerts, proposals, isLoading, userRegistry, pendingJoinSpaceId } = useLAD();
   const [activeTab, setActiveTab] = useState<ActiveTab>('hub');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('health');
   const [captureModalOpen, setCaptureModalOpen] = useState(false);
@@ -57,9 +57,17 @@ const AppContent: React.FC = () => {
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check if first-run onboarding is needed
+  // Check if first-run onboarding is needed (bypass if joining an invited space)
   useEffect(() => {
     if (!isLoading && userRegistry) {
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const isJoining = Boolean(pendingJoinSpaceId || urlParams?.get('join') || urlParams?.get('space'));
+
+      if (isJoining) {
+        setShowOnboarding(false);
+        return;
+      }
+
       const isCompleted = localStorage.getItem('lad_onboarded') === 'true';
       const hasCustomName =
         userRegistry.identities[0]?.display_name &&
@@ -68,7 +76,7 @@ const AppContent: React.FC = () => {
         setShowOnboarding(true);
       }
     }
-  }, [isLoading, userRegistry]);
+  }, [isLoading, userRegistry, pendingJoinSpaceId]);
 
   const attentionCount = activeAlerts.length + proposals.length;
 

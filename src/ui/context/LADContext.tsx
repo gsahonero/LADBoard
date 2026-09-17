@@ -5,6 +5,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { LADUserRegistry, LADSpaceManifest, LADSpaceSettings, LADObject, LADGraphNode, LADGraphEdge, LADOperation, LADActiveAlert } from '../../core/standard/types';
 import { AuthService } from '../../core/identity/auth-service';
+import { AuthUser } from '../../core/identity/types';
 import { UserRegistryManager } from '../../core/identity/user-registry';
 import { StorageManager } from '../../core/storage/storage-manager';
 import { SpaceManager, LoadedSpace } from '../../core/space/space-manager';
@@ -94,7 +95,7 @@ export interface LADContextType {
   // Settings
   updatePreferences: (prefs: Partial<LADUserRegistry['preferences']>) => Promise<void>;
   updateProfile: (displayName: string, email?: string) => Promise<void>;
-  connectGoogleDrive: (clientId?: string) => Promise<void>;
+  connectGoogleDrive: (clientId?: string) => Promise<AuthUser | null>;
 
   isLoading: boolean;
 }
@@ -522,7 +523,18 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             status: 'active',
             last_synced_at: new Date().toISOString(),
           });
-          setUserRegistry({ ...userRegistryManager.getRegistry()! });
+        }
+
+        // Update user registry identity display name if still default and Google profile name is available
+        if (auth.user?.name && userRegistry.identities[0]?.display_name === 'LAD User') {
+          await userRegistryManager.updateIdentity(auth.user.name, auth.user.email);
+        }
+
+        setUserRegistry({ ...userRegistryManager.getRegistry()! });
+
+        // Mark as onboarded so the user is never prompted to create their first space after joining
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lad_onboarded', 'true');
         }
 
         setActiveSpace(loaded);
@@ -771,7 +783,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const connectGoogleDrive = useCallback(
-    async (clientId?: string) => {
+    async (clientId?: string): Promise<AuthUser | null> => {
       const targetClientId =
         clientId?.trim() ||
         userRegistry?.preferences.gdrive_client_id ||
@@ -811,9 +823,17 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             await activeSpace.syncCoordinator.triggerSync();
           }
           refreshSpaceState();
+          return user;
         }
+        return null;
       } catch (err: any) {
-        console.error('Google OAuth connection error:', err);
+        if (err?.message?.includes('closed') || err?.message?.includes('cancelled')) {
+          console.warn('Google OAuth prompt dismissed by user.');
+          throw err;
+        } else {
+          console.error('Google OAuth connection error:', err);
+          throw err;
+        }
       }
     },
     [

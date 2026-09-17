@@ -100,15 +100,24 @@ export class GDriveStorageProvider implements IStorageProvider {
     return path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
   }
 
+  private relativeToLAD(path: string): string {
+    const norm = this.normalize(path);
+    if (!norm || norm === 'LAD' || norm === 'lad') return '';
+    if (norm.startsWith('LAD/') || norm.startsWith('lad/')) {
+      return norm.substring(4);
+    }
+    return norm;
+  }
+
   /**
-   * Ensures the LAD root folder exists in Drive
+   * Ensures the LAD root folder exists in Drive (at the root of Drive)
    */
-  async ensureRootFolder(): Promise<string> {
+  async ensureRootFolder(createIfMissing: boolean = true): Promise<string | null> {
     if (this.rootFolderId && this.rootFolderId !== 'undefined') return this.rootFolderId;
 
-    // Search for LAD root folder
-    const q = encodeURIComponent("name = 'LAD' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+    // Search for top-level LAD root folder
+    const q = encodeURIComponent("name = 'LAD' and 'root' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
     const data = await res.json();
 
     if (data.files && data.files.length > 0 && data.files[0].id) {
@@ -116,8 +125,22 @@ export class GDriveStorageProvider implements IStorageProvider {
       return this.rootFolderId!;
     }
 
-    // Create LAD root folder
-    const createRes = await this.fetchDrive('https://www.googleapis.com/drive/v3/files', {
+    // Fallback: search for any un-trashed LAD folder
+    const qFallback = encodeURIComponent("name = 'LAD' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+    const resFallback = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qFallback}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+    const dataFallback = await resFallback.json();
+
+    if (dataFallback.files && dataFallback.files.length > 0 && dataFallback.files[0].id) {
+      this.rootFolderId = dataFallback.files[0].id;
+      return this.rootFolderId!;
+    }
+
+    if (!createIfMissing) {
+      return null;
+    }
+
+    // Create LAD root folder at top-level of My Drive
+    const createRes = await this.fetchDrive('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -135,24 +158,26 @@ export class GDriveStorageProvider implements IStorageProvider {
 
   /**
    * Resolves or creates a nested folder path in Google Drive
+   * Handles space-sharing resolution across different Google Drive accounts
    */
-  async resolveFolderPath(folderPath: string): Promise<string> {
-    const normalized = this.normalize(folderPath);
-    if (!normalized) return this.ensureRootFolder();
+  async resolveFolderPath(folderPath: string, createIfMissing: boolean = true): Promise<string | null> {
+    const relative = this.relativeToLAD(folderPath);
+    if (!relative) return this.ensureRootFolder(createIfMissing);
 
-    if (this.folderCache.has(normalized)) {
-      const cached = this.folderCache.get(normalized);
+    if (this.folderCache.has(relative)) {
+      const cached = this.folderCache.get(relative);
       if (cached && cached !== 'undefined') return cached;
     }
 
-    const parts = normalized.split('/');
-    let currentParentId = await this.ensureRootFolder();
-    if (!currentParentId || currentParentId === 'undefined') {
+    const parts = relative.split('/');
+    let currentParentId = await this.ensureRootFolder(createIfMissing);
+    if (!currentParentId && createIfMissing) {
       throw new Error('Invalid Google Drive root folder ID when resolving folder path');
     }
 
     let accumulatedPath = '';
-    for (const part of parts) {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
       accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
       if (this.folderCache.has(accumulatedPath)) {
         const cached = this.folderCache.get(accumulatedPath);
@@ -162,29 +187,103 @@ export class GDriveStorageProvider implements IStorageProvider {
         }
       }
 
-      const q = encodeURIComponent(`name = '${part}' and '${currentParentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-      const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
-      const searchData = await searchRes.json();
+      if (i === 0 && part.startsWith('spc_')) {
+        // Query for space folder across own LAD and shared folders
+        const qShared = encodeURIComponent(`name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+        const searchSharedRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qShared}&fields=files(id,name,shared,ownedByMe,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
+        const searchSharedData = await searchSharedRes.json();
+        const candidateFiles = searchSharedData.files || [];
 
-      if (searchData.files && searchData.files.length > 0 && searchData.files[0].id) {
-        currentParentId = searchData.files[0].id;
-      } else {
-        const createRes = await this.fetchDrive('https://www.googleapis.com/drive/v3/files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: part,
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [currentParentId],
-          }),
-        });
-        const createData = await createRes.json();
-        if (!createData?.id) {
-          throw new Error(`Google Drive failed to create folder "${part}"`);
+        if (candidateFiles.length > 0) {
+          let selectedFolderId: string | null = null;
+
+          // Priority 1: Candidate folder that contains manifest.json
+          for (const candidate of candidateFiles) {
+            const qManifest = encodeURIComponent(`name = 'manifest.json' and '${candidate.id}' in parents and trashed = false`);
+            const manifestRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${qManifest}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
+            const manifestData = await manifestRes.json();
+            if (manifestData.files && manifestData.files.length > 0) {
+              selectedFolderId = candidate.id;
+              break;
+            }
+          }
+
+          // Priority 2: Candidate that is shared or not ownedByMe
+          if (!selectedFolderId) {
+            const sharedCandidate = candidateFiles.find((f: any) => f.shared || f.ownedByMe === false);
+            if (sharedCandidate) {
+              selectedFolderId = sharedCandidate.id;
+            }
+          }
+
+          // Priority 3: First candidate
+          if (!selectedFolderId && candidateFiles[0]?.id) {
+            selectedFolderId = candidateFiles[0].id;
+          }
+
+          if (selectedFolderId) {
+            currentParentId = selectedFolderId;
+          }
+        } else if (createIfMissing) {
+          if (!currentParentId) {
+            currentParentId = await this.ensureRootFolder(true);
+          }
+          // Create new space folder inside currentParentId
+          const createRes = await this.fetchDrive('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: part,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: currentParentId ? [currentParentId] : undefined,
+            }),
+          });
+          const createData = await createRes.json();
+          if (!createData?.id) {
+            throw new Error(`Google Drive failed to create folder "${part}"`);
+          }
+          currentParentId = createData.id;
+        } else {
+          return null;
         }
-        currentParentId = createData.id;
+      } else {
+        if (!currentParentId) {
+          if (createIfMissing) {
+            currentParentId = await this.ensureRootFolder(true);
+          } else {
+            return null;
+          }
+        }
+        // Check inside currentParentId for subfolders
+        const q = encodeURIComponent(`name = '${part}' and '${currentParentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+        const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
+        const searchData = await searchRes.json();
+
+        if (searchData.files && searchData.files.length > 0 && searchData.files[0].id) {
+          currentParentId = searchData.files[0].id;
+        } else if (createIfMissing) {
+          // Create subfolder inside currentParentId
+          const createRes = await this.fetchDrive('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: part,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [currentParentId],
+            }),
+          });
+          const createData = await createRes.json();
+          if (!createData?.id) {
+            throw new Error(`Google Drive failed to create folder "${part}"`);
+          }
+          currentParentId = createData.id;
+        } else {
+          return null;
+        }
       }
-      this.folderCache.set(accumulatedPath, currentParentId);
+      if (currentParentId) {
+        this.folderCache.set(accumulatedPath, currentParentId);
+      }
     }
 
     return currentParentId;
@@ -196,13 +295,13 @@ export class GDriveStorageProvider implements IStorageProvider {
     const fileName = parts.pop()!;
     const folderPath = parts.join('/');
 
-    const parentId = await this.resolveFolderPath(folderPath);
+    const parentId = await this.resolveFolderPath(folderPath, false);
     if (!parentId || parentId === 'undefined') {
-      throw new Error(`Invalid parent ID for folder "${folderPath}"`);
+      return null;
     }
 
     const q = encodeURIComponent(`name = '${fileName}' and '${parentId}' in parents and trashed = false`);
-    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`);
+    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
     const searchData = await searchRes.json();
 
     if (!searchData.files || searchData.files.length === 0) {
@@ -212,7 +311,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     const fileId = searchData.files[0].id;
     this.fileCache.set(normalized, fileId);
 
-    const downloadRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    const downloadRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`);
     const text = await downloadRes.text();
     try {
       return JSON.parse(text) as T;
@@ -227,7 +326,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     const fileName = parts.pop()!;
     const folderPath = parts.join('/');
 
-    const parentId = await this.resolveFolderPath(folderPath);
+    const parentId = await this.resolveFolderPath(folderPath, true);
     if (!parentId || parentId === 'undefined') {
       throw new Error(`Invalid parent ID for folder "${folderPath}"`);
     }
@@ -238,7 +337,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     let fileId = this.fileCache.get(normalized);
     if (!fileId) {
       const q = encodeURIComponent(`name = '${fileName}' and '${parentId}' in parents and trashed = false`);
-      const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+      const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
       const searchData = await searchRes.json();
       if (searchData.files && searchData.files.length > 0) {
         fileId = searchData.files[0].id;
@@ -248,7 +347,7 @@ export class GDriveStorageProvider implements IStorageProvider {
 
     if (fileId) {
       // Update file content
-      await this.fetchDrive(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+      await this.fetchDrive(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -276,7 +375,7 @@ export class GDriveStorageProvider implements IStorageProvider {
         bodyStr +
         closeDelim;
 
-      const createRes = await this.fetchDrive('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      const createRes = await this.fetchDrive('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
         method: 'POST',
         headers: {
           'Content-Type': `multipart/related; boundary=${boundary}`,
@@ -296,16 +395,16 @@ export class GDriveStorageProvider implements IStorageProvider {
     const fileName = parts.pop()!;
     const folderPath = parts.join('/');
 
-    const parentId = await this.resolveFolderPath(folderPath);
+    const parentId = await this.resolveFolderPath(folderPath, false);
     if (!parentId || parentId === 'undefined') return;
 
     const q = encodeURIComponent(`name = '${fileName}' and '${parentId}' in parents and trashed = false`);
-    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
     const searchData = await searchRes.json();
 
     if (searchData.files && searchData.files.length > 0) {
       const fileId = searchData.files[0].id;
-      await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+      await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
         method: 'DELETE',
       });
       this.fileCache.delete(normalized);
@@ -319,11 +418,11 @@ export class GDriveStorageProvider implements IStorageProvider {
   }
 
   async listFiles(directoryPath: string): Promise<IStorageFile[]> {
-    const parentId = await this.resolveFolderPath(directoryPath);
+    const parentId = await this.resolveFolderPath(directoryPath, false);
     if (!parentId || parentId === 'undefined') return [];
 
     const q = encodeURIComponent(`'${parentId}' in parents and trashed = false`);
-    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime)`);
+    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&spaces=drive&corpora=allDrives`);
     const data = await res.json();
 
     if (!data.files) return [];
@@ -341,6 +440,6 @@ export class GDriveStorageProvider implements IStorageProvider {
   }
 
   async ensureDirectory(directoryPath: string): Promise<void> {
-    await this.resolveFolderPath(directoryPath);
+    await this.resolveFolderPath(directoryPath, true);
   }
 }
