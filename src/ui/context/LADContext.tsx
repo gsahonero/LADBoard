@@ -1218,3 +1218,8 @@ export function useLAD(): LADContextType {
   }
   return context;
 }
+
+export function useOptionalLAD(): LADContextType | undefined {
+  return useContext(LADContext);
+}
+

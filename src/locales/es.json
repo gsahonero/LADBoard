@@ -29,7 +29,18 @@
     "syncNow": "Sincronizar Ahora",
     "syncing": "Sincronizando...",
     "lastSynced": "Última sincronización: {time}",
-    "neverSynced": "Aún no sincronizado"
+    "neverSynced": "Aún no sincronizado",
+    "paneTitle": "Estado de Sincronización y Almacenamiento",
+    "gdriveTitle": "Google Drive",
+    "gdriveConnected": "Conectado y Sincronizado",
+    "gdriveSyncing": "Sincronizando cambios...",
+    "gdriveOffline": "Desconectado (cambios en cola)",
+    "gdriveNotConnected": "No conectado",
+    "offlineTitle": "Almacenamiento Local del Dispositivo",
+    "offlineActive": "IndexedDB Activo (Guardado localmente)",
+    "offlinePending": "{count} operaciones locales pendientes",
+    "offlineAllSaved": "Todos los cambios guardados en este dispositivo",
+    "accountLabel": "Cuenta"
   },
   "spaces": {
     "title": "Espacios",

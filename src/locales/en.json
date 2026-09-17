@@ -29,7 +29,18 @@
     "syncNow": "Sync Now",
     "syncing": "Syncing...",
     "lastSynced": "Last synced: {time}",
-    "neverSynced": "Not synced yet"
+    "neverSynced": "Not synced yet",
+    "paneTitle": "Storage & Sync Status",
+    "gdriveTitle": "Google Drive",
+    "gdriveConnected": "Connected & Synced",
+    "gdriveSyncing": "Syncing changes...",
+    "gdriveOffline": "Offline (changes queued)",
+    "gdriveNotConnected": "Not connected",
+    "offlineTitle": "Offline Device Storage",
+    "offlineActive": "IndexedDB Active (Saved locally)",
+    "offlinePending": "{count} pending local operations",
+    "offlineAllSaved": "All changes saved to device",
+    "accountLabel": "Account"
   },
   "spaces": {
     "title": "Spaces",

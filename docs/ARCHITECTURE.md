@@ -42,7 +42,10 @@ LAD Board is implemented as a client-side, offline-first Progressive Web Applica
    - **Fallback**: Defaults to Google Drive when signed in, automatically preserving changes in `offlineQueue` on network or permission errors.
 8. **`core/active`**: Active monitoring engine, rule triggers, notification dispatcher.
 9. **`core/i18n`**: Bilingual localization system (EN/ES) with zero untranslated UI strings.
-10. **`ui`**: Responsive, accessible, neurodiversity-conscious UI components with Danger Zones for Space Deletion / Leaving and Account Erasure.
+10. **`ui`**: Responsive, accessible, neurodiversity-conscious UI components:
+    - **Sync Status Pane**: Moving the cursor over the sync badge reveals a floating real-time status pane detailing Google Drive connection status, authenticated account email, and local IndexedDB offline storage status with pending operations count and direct "Sync Now" trigger.
+    - **Lifecycle & Danger Zones**: Comprehensive workflows for Space Deletion, Space Leaving, and Complete Account & Cloud Data Erasure.
+
 
 ## Space & Account Lifecycle Management
 

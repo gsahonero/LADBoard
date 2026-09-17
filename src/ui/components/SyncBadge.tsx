@@ -1,17 +1,59 @@
 /**
- * Sync Status Badge Component
+ * Sync Status Badge Component with Real-Time Hover Status Pane
  */
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SyncState } from '../../core/sync/types';
 import { useI18n } from '../../core/i18n/i18n-context';
-import { CheckCircle2, RefreshCw, WifiOff, AlertTriangle, AlertCircle } from 'lucide-react';
+import { useOptionalLAD } from '../context/LADContext';
+import {
+  CheckCircle2,
+  RefreshCw,
+  WifiOff,
+  AlertTriangle,
+  AlertCircle,
+  Cloud,
+  HardDrive,
+  User,
+} from 'lucide-react';
 
 export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => void }> = ({
   syncState,
   onSyncClick,
 }) => {
   const { t } = useI18n();
+  const lad = useOptionalLAD();
+  const [isOpen, setIsOpen] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      setIsOpen(false);
+    }, 250);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const authState = lad?.authService?.getState();
+  const isGDriveConfigured = !!lad?.storageManager?.getRemoteProvider();
+  const isGoogleUser = (authState?.isAuthenticated && authState?.user?.provider === 'google') || isGDriveConfigured;
+  const userEmail = authState?.user?.email || lad?.userRegistry?.user_id;
 
   const getBadgeContent = () => {
     switch (syncState.status) {
@@ -63,14 +105,163 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
 
   const badge = getBadgeContent();
 
+  const getGDriveStatus = () => {
+    if (!isGoogleUser && !isGDriveConfigured) {
+      return {
+        icon: <AlertCircle className="w-3 h-3 text-neutral-400" />,
+        text: t('sync.gdriveNotConnected'),
+        color: 'text-neutral-500 dark:text-neutral-400',
+      };
+    }
+    if (syncState.status === 'syncing') {
+      return {
+        icon: <RefreshCw className="w-3 h-3 text-lad-500 animate-spin" />,
+        text: t('sync.gdriveSyncing'),
+        color: 'text-lad-600 dark:text-lad-400',
+      };
+    }
+    if (syncState.status === 'offline' || !syncState.isOnline) {
+      return {
+        icon: <WifiOff className="w-3 h-3 text-amber-500" />,
+        text: t('sync.gdriveOffline'),
+        color: 'text-amber-600 dark:text-amber-400',
+      };
+    }
+    if (syncState.status === 'conflict_detected') {
+      return {
+        icon: <AlertTriangle className="w-3 h-3 text-rose-500" />,
+        text: t('sync.conflictDetected'),
+        color: 'text-rose-600 dark:text-rose-400',
+      };
+    }
+    return {
+      icon: <CheckCircle2 className="w-3 h-3 text-emerald-500" />,
+      text: t('sync.gdriveConnected'),
+      color: 'text-emerald-600 dark:text-emerald-400',
+    };
+  };
+
+  const gdriveStatus = getGDriveStatus();
+  const lastSyncedText = syncState.lastSyncedAt
+    ? t('sync.lastSynced', { time: new Date(syncState.lastSyncedAt).toLocaleTimeString() })
+    : t('sync.neverSynced');
+
   return (
-    <button
-      onClick={onSyncClick}
-      title={syncState.lastSyncedAt ? t('sync.lastSynced', { time: new Date(syncState.lastSyncedAt).toLocaleTimeString() }) : t('sync.neverSynced')}
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 ${badge.bg}`}
+    <div
+      className="relative inline-block text-left"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      {badge.icon}
-      <span>{badge.text}</span>
-    </button>
+      <button
+        onClick={onSyncClick}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 ${badge.bg}`}
+      >
+        {badge.icon}
+        <span>{badge.text}</span>
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-72 sm:w-80 p-3.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xl z-50 text-left cursor-default select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-neutral-100 dark:border-neutral-800">
+              <span className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                {t('sync.paneTitle')}
+              </span>
+              <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                {lastSyncedText}
+              </span>
+            </div>
+
+            {/* Status Breakdown */}
+            <div className="py-2.5 space-y-3">
+              {/* Google Drive Status */}
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 mt-0.5">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                      {t('sync.gdriveTitle')}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${gdriveStatus.color}`}>
+                      {gdriveStatus.icon}
+                      <span>{gdriveStatus.text}</span>
+                    </span>
+                  </div>
+                  {userEmail && isGoogleUser ? (
+                    <div className="flex items-center gap-1 text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 truncate">
+                      <User className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{userEmail}</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+                      {t('sync.gdriveNotConnected')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Offline Storage Status */}
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                      {t('sync.offlineTitle')}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{t('sync.offlineActive')}</span>
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                    {syncState.pendingOpsCount > 0
+                      ? t('sync.offlinePending', { count: syncState.pendingOpsCount })
+                      : t('sync.offlineAllSaved')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Error Message if present */}
+            {syncState.errorMessage && (
+              <div className="mb-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-[11px] flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-500" />
+                <span className="line-clamp-2">{syncState.errorMessage}</span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSyncClick) onSyncClick();
+                  else if (lad?.triggerSync) lad.triggerSync();
+                }}
+                disabled={syncState.status === 'syncing'}
+                className="w-full py-1.5 px-3 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
+                <span>{t('sync.syncNow')}</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
