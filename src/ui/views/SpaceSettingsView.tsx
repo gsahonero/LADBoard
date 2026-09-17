@@ -317,8 +317,8 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
         </div>
       </div>
 
-      {/* Sticky Header Bar with Persistent Save & Reminder - Visible At All Times */}
-      <div className="sticky top-0 z-20 -mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Sticky Header Bar with Persistent Save & Reminder - Visible At All Times & Floating as page scrolls */}
+      <div className="sticky top-[53px] sm:top-[57px] z-20 -mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-xl bg-lad-50 dark:bg-lad-950/40 text-lad-600 dark:text-lad-400 shrink-0">
             <ModernIcon name={activeIconKey} className="w-5 h-5" />

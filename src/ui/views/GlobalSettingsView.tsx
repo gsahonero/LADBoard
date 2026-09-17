@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
 import { DEFAULT_GDRIVE_CLIENT_ID } from '../../core/standard/constants';
@@ -70,6 +70,34 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
       setDisplayName(userRegistry.identities[0].display_name);
     }
   }, [userRegistry?.identities]);
+
+  const hasChanges = useMemo(() => {
+    if (!userRegistry) return false;
+    const origName = userRegistry.identities?.[0]?.display_name || 'Owner';
+    const origThreshold = (userRegistry.preferences.change_commit_threshold_ms || 5000) / 1000;
+    const origInterval = (userRegistry.preferences.active_evaluation_interval_ms || 30000) / 1000;
+    const origPalette = userRegistry.preferences.palette_theme || 'calm_focus';
+    const origLocale = userRegistry.preferences.locale || 'en';
+
+    return (
+      displayName.trim() !== origName ||
+      threshold !== origThreshold ||
+      activeInterval !== origInterval ||
+      currentPalette !== origPalette ||
+      locale !== origLocale
+    );
+  }, [userRegistry, displayName, threshold, activeInterval, currentPalette, locale]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
@@ -168,15 +196,60 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
         </div>
       </div>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-          <Settings className="w-6 h-6 text-lad-500" />
-          {t('settings.title')}
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {t('settings.subtitle')}
-        </p>
+      {/* Sticky Header Bar with Persistent Save & Reminder - Visible At All Times & Floating as page scrolls */}
+      <div className="sticky top-[53px] sm:top-[57px] z-20 -mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 rounded-xl bg-lad-50 dark:bg-lad-950/40 text-lad-600 dark:text-lad-400 shrink-0">
+            <Settings className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                {t('settings.title')}
+              </h1>
+              {hasChanges ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
+                  <AlertCircle className="w-3 h-3" />
+                  {t('settings.unsavedChanges')}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  {t('settings.allSaved')}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+              {hasChanges ? t('settings.unsavedReminder') : t('settings.subtitle')}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <button
+            type="button"
+            onClick={handleSaveSettings}
+            disabled={isSaving}
+            aria-label={t('settings.saveSettings')}
+            className={`px-5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+              hasChanges
+                ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-md shadow-lad-500/20 ring-2 ring-lad-500/40'
+                : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>{t('settings.saving')}</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>{t('settings.saveSettings')}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {successMsg && (
@@ -421,15 +494,29 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
         </div>
       </div>
 
-      {/* Save Button Bar */}
+      {/* Save Button Bar (Bottom) */}
       <div className="flex justify-end pt-2">
         <button
           type="button"
           onClick={handleSaveSettings}
           disabled={isSaving}
-          className="px-6 py-2.5 text-xs font-bold text-white bg-lad-600 hover:bg-lad-700 active:scale-95 rounded-2xl shadow-sm transition-all cursor-pointer"
+          className={`px-6 py-2.5 text-xs font-bold rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 ${
+            hasChanges
+              ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-md shadow-lad-500/20'
+              : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
         >
-          {isSaving ? 'Saving...' : t('settings.saveSettings')}
+          {isSaving ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>{t('settings.saving')}</span>
+            </>
+          ) : (
+            <>
+              <Check className="w-3.5 h-3.5" />
+              <span>{t('settings.saveSettings')}</span>
+            </>
+          )}
         </button>
       </div>
 

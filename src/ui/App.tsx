@@ -37,6 +37,10 @@ const pageVariants: Variants = {
       duration: 0.38,
       ease: [0.16, 1, 0.3, 1],
     },
+    transitionEnd: {
+      transform: 'none',
+      filter: 'none',
+    },
   },
   exit: {
     opacity: 0,
@@ -134,7 +138,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex flex-col bg-slate-50/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-500">
+    <div className="min-h-screen relative overflow-x-hidden flex flex-col bg-slate-50/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-500">
       {/* Global Ambient Background Atmosphere */}
       <div className="absolute inset-0 bg-mesh-pattern bg-radial-vignette pointer-events-none opacity-50 dark:opacity-30" />
       <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[120px] pointer-events-none" />
@@ -203,7 +207,7 @@ const AppContent: React.FC = () => {
               />
 
               {/* Space Dashboard View Area */}
-              <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 overflow-y-auto max-w-5xl">
+              <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 max-w-5xl">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentKey}

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { SpaceSettingsView } from '../ui/views/SpaceSettingsView';
+import { GlobalSettingsView } from '../ui/views/GlobalSettingsView';
 import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADContext } from '../ui/context/LADContext';
-import { LADSpaceManifest } from '../core/standard/types';
+import { LADSpaceManifest, LADUserRegistry } from '../core/standard/types';
 
 describe('SpaceSettingsView Persistent Save & Reminder Bar', () => {
   const mockManifest: LADSpaceManifest = {
@@ -113,6 +114,143 @@ describe('SpaceSettingsView Persistent Save & Reminder Bar', () => {
     // Success notification is shown
     await waitFor(() => {
       expect(screen.getByText('Space settings updated successfully!')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('GlobalSettingsView Floating Save & Reminder Bar', () => {
+  const mockUserRegistry: LADUserRegistry = {
+    lad_standard: '1.0',
+    schema_version: '1.0.0',
+    user_id: 'usr_me123',
+    identities: [
+      {
+        provider: 'google',
+        subject_id: 'sub_123',
+        email: 'me@gmail.com',
+        display_name: 'Alex Rivera',
+      },
+    ],
+    spaces: [
+      {
+        space_id: 'spc_default',
+        space_name: 'Personal Space',
+        storage_provider: 'local_indexeddb',
+        storage_reference: 'LAD/spc_default',
+        role: 'owner',
+        status: 'active',
+        last_synced_at: new Date().toISOString(),
+      },
+    ],
+    preferences: {
+      locale: 'en',
+      theme: 'system',
+      change_commit_threshold_ms: 5000,
+      active_evaluation_interval_ms: 30000,
+      palette_theme: 'ocean',
+    },
+    device_metadata: {
+      device_id: 'dev_123',
+      platform: 'web',
+    },
+    version: 1,
+    updated_at: new Date().toISOString(),
+  };
+
+  const createMockGlobalContext = (overrides = {}) => ({
+    userRegistry: mockUserRegistry,
+    updatePreferences: vi.fn().mockResolvedValue(undefined),
+    updateProfile: vi.fn().mockResolvedValue(undefined),
+    connectGoogleDrive: vi.fn(),
+    authService: {
+      getState: () => ({ isAuthenticated: true, user: { email: 'me@gmail.com', provider: 'google' } }),
+      signOut: vi.fn(),
+    },
+    activeManifest: {
+      space_id: 'spc_default',
+      space_name: 'Personal Space',
+    },
+    repairSpaceDriveFiles: vi.fn(),
+    deleteAccount: vi.fn(),
+    ...overrides,
+  });
+
+  it('renders floating save bar at the top with "All Changes Saved" initially', () => {
+    const mockContext = createMockGlobalContext();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext as any}>
+          <GlobalSettingsView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Save buttons should be visible (both in top floating bar and bottom)
+    const saveButtons = screen.getAllByRole('button', { name: /Save Global Settings/i });
+    expect(saveButtons.length).toBeGreaterThanOrEqual(1);
+
+    // Initial clean state badge
+    expect(screen.getByText('All Changes Saved')).toBeInTheDocument();
+  });
+
+  it('detects modifications and displays "Unsaved Changes" reminder immediately in floating bar', async () => {
+    const mockContext = createMockGlobalContext();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext as any}>
+          <GlobalSettingsView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Change display name
+    const nameInput = screen.getByDisplayValue('Alex Rivera');
+    fireEvent.change(nameInput, { target: { value: 'Alex Morgan' } });
+
+    // The floating bar immediately alerts about unsaved changes
+    expect(screen.getByText('Unsaved Changes')).toBeInTheDocument();
+    expect(
+      screen.getByText('You have unsaved changes. Remember to save your settings.')
+    ).toBeInTheDocument();
+  });
+
+  it('saves changes when clicking the floating Save Global Settings button', async () => {
+    const mockContext = createMockGlobalContext();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext as any}>
+          <GlobalSettingsView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Modify display name
+    const nameInput = screen.getByDisplayValue('Alex Rivera');
+    fireEvent.change(nameInput, { target: { value: 'Alex Updated' } });
+
+    expect(screen.getByText('Unsaved Changes')).toBeInTheDocument();
+
+    const saveButtons = screen.getAllByRole('button', { name: /Save Global Settings/i });
+    const topFloatingSaveBtn = saveButtons[0];
+
+    await act(async () => {
+      fireEvent.click(topFloatingSaveBtn);
+    });
+
+    expect(mockContext.updateProfile).toHaveBeenCalledWith('Alex Updated');
+    expect(mockContext.updatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        change_commit_threshold_ms: 5000,
+        active_evaluation_interval_ms: 30000,
+      })
+    );
+
+    // Success notification is shown
+    await waitFor(() => {
+      expect(screen.getByText('Settings saved!')).toBeInTheDocument();
     });
   });
 });
