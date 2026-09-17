@@ -493,4 +493,64 @@ export class GDriveStorageProvider implements IStorageProvider {
   async ensureDirectory(directoryPath: string): Promise<void> {
     await this.resolveFolderPath(directoryPath, true);
   }
+
+  /**
+   * Deletes a folder and all its contents in Google Drive
+   */
+  async deleteDirectory(directoryPath: string): Promise<void> {
+    const norm = this.normalize(directoryPath);
+    console.log(`[LAD:GDrive] 🗑️ Deleting directory "${directoryPath}"...`);
+
+    const folderId = await this.resolveFolderPath(directoryPath, false);
+    if (!folderId || folderId === 'undefined') {
+      console.log(`[LAD:GDrive] Folder "${directoryPath}" not found for deletion.`);
+      return;
+    }
+
+    try {
+      await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${folderId}?supportsAllDrives=true`, {
+        method: 'DELETE',
+      });
+      console.log(`[LAD:GDrive] ✅ Deleted folder "${directoryPath}" (folderId: ${folderId})`);
+    } catch (err) {
+      console.warn(`[LAD:GDrive] Warning deleting folder "${directoryPath}":`, err);
+    }
+
+    // Invalidate caches
+    for (const k of Array.from(this.folderCache.keys())) {
+      if (k === norm || k.startsWith(`${norm}/`)) {
+        this.folderCache.delete(k);
+      }
+    }
+    for (const k of Array.from(this.fileCache.keys())) {
+      if (k.startsWith(`${norm}/`)) {
+        this.fileCache.delete(k);
+      }
+    }
+  }
+
+  /**
+   * Deletes the entire LAD root folder in Google Drive (Account Erase)
+   */
+  async deleteRootFolder(): Promise<void> {
+    console.log('[LAD:GDrive] ⚠️ Permanent account erasure: Deleting root "LAD" folder from Google Drive...');
+    const rootId = await this.ensureRootFolder(false);
+    if (rootId) {
+      try {
+        await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${rootId}?supportsAllDrives=true`, {
+          method: 'DELETE',
+        });
+        console.log('[LAD:GDrive] ✅ Successfully deleted root "LAD" folder from Google Drive');
+      } catch (err) {
+        console.warn('[LAD:GDrive] Failed to delete root "LAD" folder:', err);
+      }
+    }
+    this.rootFolderId = null;
+    this.folderCache.clear();
+    this.fileCache.clear();
+  }
+
+  async clearAll(): Promise<void> {
+    await this.deleteRootFolder();
+  }
 }

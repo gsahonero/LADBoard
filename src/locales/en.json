@@ -27,6 +27,7 @@
     "needsAttention": "Sync needs attention",
     "conflictDetected": "Conflict detected",
     "syncNow": "Sync Now",
+    "syncing": "Syncing...",
     "lastSynced": "Last synced: {time}",
     "neverSynced": "Not synced yet"
   },
@@ -49,7 +50,14 @@
     "unavailableDesc": "Could not access this Space.",
     "tryAgain": "Try Again",
     "keepForLater": "Keep for Later",
-    "remove": "Remove from Device"
+    "remove": "Remove from Device",
+    "deleteSpace": "Delete Space",
+    "leaveSpace": "Leave Space",
+    "confirmDeleteSpaceTitle": "Delete Space",
+    "confirmDeleteSpaceDesc": "Are you sure you want to delete \"{name}\"? This will permanently erase the space and all its items from Google Drive and this device.",
+    "confirmLeaveSpaceTitle": "Leave Space",
+    "confirmLeaveSpaceDesc": "Are you sure you want to leave \"{name}\"? It will be removed from your account and device. The owner will retain all space data.",
+    "deleting": "Deleting..."
   },
   "capture": {
     "placeholder": "Type anything... (e.g. Doctor says continue meds, blood test in 2 weeks, dad schedules follow-up)",
@@ -233,7 +241,13 @@
     "statusNotConfigured": "Not Signed In (Sign in with Google in Global Settings)",
     "statusOffline": "Offline Cache Enabled",
     "saveChanges": "Save Space Settings",
-    "savedSuccess": "Space settings updated successfully!"
+    "savedSuccess": "Space settings updated successfully!",
+    "dangerZone": "Danger Zone",
+    "dangerZoneDesc": "Permanent actions for this space.",
+    "deleteSpaceButton": "Delete Space",
+    "leaveSpaceButton": "Leave Space",
+    "deleteSpaceWarning": "Permanently deletes this space and all items from Google Drive and this device.",
+    "leaveSpaceWarning": "Removes this space from your device and account. The owner retains all data."
   },
   "settings": {
     "title": "Global Settings",
@@ -293,7 +307,15 @@
       }
     },
     "saveSettings": "Save Global Settings",
-    "savedSuccess": "Settings saved!"
+    "savedSuccess": "Settings saved!",
+    "dangerZone": "Danger Zone",
+    "dangerZoneDesc": "Irreversible actions for your account and all data.",
+    "deleteAccount": "Delete Account & Erase All Data",
+    "deleteAccountDesc": "Permanently deletes all data from Google Drive (the entire LAD folder), clears offline storage from this device, and signs out.",
+    "confirmDeleteAccountTitle": "Permanently Delete Account & All Data?",
+    "confirmDeleteAccountDesc": "This action is destructive and irreversible. It will permanently delete your Google Drive LAD folder, all spaces, items, and local device data.",
+    "confirmDeleteAccountButton": "Yes, Permanently Erase All Data",
+    "erasingData": "Erasing all data..."
   },
   "onboarding": {
     "step1": {

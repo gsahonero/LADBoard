@@ -14,6 +14,9 @@ import {
   Smile,
   FileText,
   Loader2,
+  Trash2,
+  LogOut,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   SPACE_ICON_PRESETS,
@@ -28,10 +31,12 @@ export const SpaceManagerModal: React.FC<{
   onClose: () => void;
   onOpenCreateSpace?: () => void;
 }> = ({ isOpen, onClose, onOpenCreateSpace }) => {
-  const { spaces, activeSpaceId, switchSpace, createSpace, updateSpaceIdentity, inviteMember } = useLAD();
+  const { spaces, activeSpaceId, switchSpace, createSpace, updateSpaceIdentity, inviteMember, deleteSpace } = useLAD();
   const { t } = useI18n();
 
   const [isInviting, setIsInviting] = useState(false);
+  const [confirmDeleteSpace, setConfirmDeleteSpace] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Create Space form state
   const [newSpaceName, setNewSpaceName] = useState('');
@@ -408,6 +413,18 @@ export const SpaceManagerModal: React.FC<{
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
 
+                              <button
+                                onClick={() => setConfirmDeleteSpace(s)}
+                                className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                                title={s.role === 'owner' ? t('spaces.deleteSpace') : t('spaces.leaveSpace')}
+                              >
+                                {s.role === 'owner' ? (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                ) : (
+                                  <LogOut className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+
                               {!isActive && (
                                 <motion.button
                                   whileTap={{ scale: 0.95 }}
@@ -588,6 +605,78 @@ export const SpaceManagerModal: React.FC<{
                 </div>
               )}
             </div>
+
+            {/* Delete / Leave Space Confirmation Modal */}
+            <AnimatePresence>
+              {confirmDeleteSpace && (
+                <div className="absolute inset-0 z-20 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-6">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 max-w-sm w-full shadow-xl space-y-4"
+                  >
+                    <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+                      <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          {confirmDeleteSpace.role === 'owner'
+                            ? t('spaces.confirmDeleteSpaceTitle')
+                            : t('spaces.confirmLeaveSpaceTitle')}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {confirmDeleteSpace.space_name}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {confirmDeleteSpace.role === 'owner'
+                        ? t('spaces.confirmDeleteSpaceDesc', { name: confirmDeleteSpace.space_name })
+                        : t('spaces.confirmLeaveSpaceDesc', { name: confirmDeleteSpace.space_name })}
+                    </p>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteSpace(null)}
+                        disabled={isDeleting}
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer disabled:opacity-50"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={async () => {
+                          setIsDeleting(true);
+                          try {
+                            await deleteSpace(confirmDeleteSpace.space_id);
+                            setConfirmDeleteSpace(null);
+                          } finally {
+                            setIsDeleting(false);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>{t('spaces.deleting')}</span>
+                          </>
+                        ) : confirmDeleteSpace.role === 'owner' ? (
+                          t('spaces.deleteSpace')
+                        ) : (
+                          t('spaces.leaveSpace')
+                        )}
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       )}

@@ -211,10 +211,17 @@ export class SpaceManager {
 
     const activeEngine = new ActiveEngine(spaceId);
 
+    let syncCoordinator: SyncCoordinator;
+
     const changeAggregator = new ChangeAggregator(commitThresholdMs, async (op) => {
       // On commit callback: append to log and enqueue for sync
       await operationLog.append(op);
       await offlineQueue.enqueue(op);
+      if (syncCoordinator) {
+        syncCoordinator.triggerSync().catch((err) => {
+          console.warn('[LAD:SpaceManager] Auto-sync failed:', err);
+        });
+      }
     });
 
     changeAggregator.setLamportClock(operationLog.getLatestLamportClock());
@@ -229,12 +236,14 @@ export class SpaceManager {
       });
     });
 
-    const syncCoordinator = new SyncCoordinator({
+    syncCoordinator = new SyncCoordinator({
       spaceId,
       localStorage: this.localStorage,
       remoteStorage: this.remoteStorage,
       offlineQueue,
       operationLog,
+      objectStore,
+      graphStore,
       onRemoteOperationsApplied: async (_ops) => {
         // Reload local memory
         await objectStore.loadAll();
@@ -536,5 +545,41 @@ export class SpaceManager {
     }
 
     return manifest;
+  }
+
+  /**
+   * Deletes a space. If currentUserId is owner, deletes from both local and remote storage.
+   * If editor/viewer, only cleans up local cached files and preserves remote files.
+   */
+  async deleteSpace(spaceId: string, currentUserId: string): Promise<boolean> {
+    const loaded = this.loadedSpaces.get(spaceId);
+    let isOwner = false;
+    if (loaded) {
+      isOwner = loaded.manifest.created_by === currentUserId;
+      loaded.syncCoordinator.stopPeriodicSync();
+      this.loadedSpaces.delete(spaceId);
+    } else {
+      const manifest = await this.localStorage.readFile<LADSpaceManifest>(this.getManifestPath(spaceId));
+      isOwner = manifest ? manifest.created_by === currentUserId : false;
+    }
+
+    if (this.activeSpaceId === spaceId) {
+      this.activeSpaceId = null;
+    }
+
+    // Delete local space directory
+    await this.localStorage.deleteDirectory(`LAD/${spaceId}`);
+
+    // If owner and remote storage is active, delete remote space directory
+    if (isOwner && this.remoteStorage) {
+      try {
+        await this.remoteStorage.deleteDirectory(`LAD/${spaceId}`);
+        console.log(`[LAD:SpaceManager] ✅ Deleted remote space directory LAD/${spaceId}`);
+      } catch (err) {
+        console.warn(`[LAD:SpaceManager] Failed to delete remote space directory LAD/${spaceId}:`, err);
+      }
+    }
+
+    return true;
   }
 }

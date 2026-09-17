@@ -98,6 +98,20 @@ export class MemoryStorageProvider implements IStorageProvider {
     this.directories.add(this.normalize(directoryPath));
   }
 
+  async deleteDirectory(directoryPath: string): Promise<void> {
+    const key = this.normalize(directoryPath);
+    this.directories.delete(key);
+    for (const k of Array.from(this.files.keys())) {
+      if (k === key || k.startsWith(`${key}/`)) {
+        this.files.delete(k);
+      }
+    }
+  }
+
+  async clearAll(): Promise<void> {
+    this.clear();
+  }
+
   // Helper for test cleanup
   clear(): void {
     this.files.clear();

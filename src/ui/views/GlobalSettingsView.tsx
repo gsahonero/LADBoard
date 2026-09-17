@@ -20,6 +20,8 @@ import {
   Cloud,
   RefreshCw,
   AlertCircle,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface GlobalSettingsViewProps {
@@ -27,8 +29,20 @@ interface GlobalSettingsViewProps {
 }
 
 export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitchToSpace }) => {
-  const { userRegistry, updatePreferences, updateProfile, connectGoogleDrive, authService, activeManifest, repairSpaceDriveFiles } = useLAD();
+  const {
+    userRegistry,
+    updatePreferences,
+    updateProfile,
+    connectGoogleDrive,
+    authService,
+    activeManifest,
+    repairSpaceDriveFiles,
+    deleteAccount,
+  } = useLAD();
   const { locale, setLocale, t } = useI18n();
+
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isErasingAccount, setIsErasingAccount] = useState(false);
 
   const [currentPalette, setCurrentPalette] = useState<PaletteId>(() => PaletteManager.getInitialPalette());
   const [displayName, setDisplayName] = useState(
@@ -418,6 +432,95 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
           {isSaving ? 'Saving...' : t('settings.saveSettings')}
         </button>
       </div>
+
+      {/* Danger Zone: Delete Account & Erase All Data */}
+      <div className="p-6 bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 rounded-3xl space-y-4 mt-6">
+        <div>
+          <h2 className="text-sm font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            {t('settings.dangerZone')}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {t('settings.dangerZoneDesc')}
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-rose-200/80 dark:border-rose-900/50">
+          <div className="space-y-0.5">
+            <div className="text-xs font-bold text-slate-900 dark:text-white">
+              {t('settings.deleteAccount')}
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {t('settings.deleteAccountDesc')}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteAccountModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>{t('settings.deleteAccount')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {t('settings.confirmDeleteAccountTitle')}
+                </h4>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {t('settings.confirmDeleteAccountDesc')}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={isErasingAccount}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={isErasingAccount}
+                onClick={async () => {
+                  setIsErasingAccount(true);
+                  try {
+                    await deleteAccount();
+                  } finally {
+                    setIsErasingAccount(false);
+                    setShowDeleteAccountModal(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isErasingAccount ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{t('settings.erasingData')}</span>
+                  </>
+                ) : (
+                  t('settings.confirmDeleteAccountButton')
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

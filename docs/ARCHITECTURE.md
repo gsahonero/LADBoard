@@ -31,12 +31,23 @@ LAD Board is implemented as a client-side, offline-first Progressive Web Applica
 ## Modular Layer Breakdown
 
 1. **`core/standard`**: Types, interfaces, invariants for LAD Standard 1.0.
-2. **`core/identity`**: Google Identity Services (GIS) token client, LAD User ID generation, `user.json` multi-device registry manager.
-3. **`core/storage`**: `IStorageProvider` abstraction contract with `IndexedDBProvider`, `GDriveProvider`, and `MemoryProvider`.
+2. **`core/identity`**: Google Identity Services (GIS) token client, LAD User ID generation, `user.json` multi-device registry manager. Supports `skipDefaultSpace` when joining via invite links to avoid phantom spaces.
+3. **`core/storage`**: `IStorageProvider` abstraction contract with `IndexedDBProvider`, `GDriveProvider`, and `MemoryProvider`. Implements `deleteDirectory()` for space removal and `clearAll()` / `deleteRootFolder()` for complete data erasure.
 4. **`core/graph`**: Node & Edge store, force-directed data bindings, hierarchical policy resolution algorithm.
 5. **`core/objects`**: Document store, dynamic schema metadata, and natural language capture parser.
-6. **`core/operations`**: Operation generator, 5-second aggregation timer, deterministic JSON-patch applicator.
-7. **`core/sync`**: Online/offline state listener, push/pull delta sync, non-destructive vector conflict resolver.
+6. **`core/operations`**: Operation generator, debounced commit threshold (`change_commit_threshold_ms`) timer, and deterministic JSON-patch applicator. Automatically triggers `SyncCoordinator.triggerSync()` upon operation commit.
+7. **`core/sync`**: Bidirectional delta op synchronization between local and Google Drive storage:
+   - **Push**: Uploads delta operations, writes updated `objects/${target}.json`, and syncs `graph/nodes.json` and `edges.json` to Google Drive.
+   - **Pull**: Fetches remote operations, downloads remote object JSON files to local storage, and syncs remote graph changes.
+   - **Fallback**: Defaults to Google Drive when signed in, automatically preserving changes in `offlineQueue` on network or permission errors.
 8. **`core/active`**: Active monitoring engine, rule triggers, notification dispatcher.
 9. **`core/i18n`**: Bilingual localization system (EN/ES) with zero untranslated UI strings.
-10. **`ui`**: Responsive, accessible, neurodiversity-conscious UI components.
+10. **`ui`**: Responsive, accessible, neurodiversity-conscious UI components with Danger Zones for Space Deletion / Leaving and Account Erasure.
+
+## Space & Account Lifecycle Management
+
+- **Delete Space**:
+  - **Owner**: Permanently deletes the space folder `LAD/${spaceId}` from both Google Drive and local IndexedDB, removing the space from `user.json`.
+  - **Collaborator (Editor/Viewer)**: Leaves the space by removing it from their local `user.json` and cleaning up local cache, leaving the owner's Google Drive files untouched.
+- **Delete Account & Complete Data Erasure**:
+  - Destructive action available in Global Settings. Permanently removes the `LAD` root folder from Google Drive, purges all local IndexedDB databases, cleans `localStorage` (`lad_*`), and signs out.

@@ -14,9 +14,11 @@ $$\text{Capture} \longrightarrow \text{Understand} \longrightarrow \text{Organiz
 
 ### Key Features
 - **Offline-First**: Instant local response via IndexedDB with automatic background synchronization.
-- **Change Aggregation**: 5-second debounced commit threshold separating transient edits from immutable Git-like operations.
+- **Change Aggregation & Auto-Sync**: Debounced commit threshold separating transient edits from immutable operations, automatically pushing delta changes and full document objects to cloud storage.
+- **Collaborative Delta Sync**: Shared spaces mirror objects, graph nodes, and membership across collaborators via Google Drive REST API.
 - **Declarative Graph & Deterministic Policies**: Users, objects, and agents form a connected graph with hierarchical notification policies.
 - **Active Layer**: Automatic background monitoring that surfaces stale bank balances, upcoming medical appointments, unresolved shopping items, and agent proposals.
+- **Space & Data Lifecycle**: Comprehensive management with Space Deletion, Leave Space for collaborators, and one-click Account Erasure wiping all cloud and device records.
 - **Bilingual (English / Español)**: 100% complete localized interface with instant language switching.
 - **Cognitive Accessibility**: Low cognitive load, high visual clarity, structured card capture, and calm design.
 - **Google Drive Storage Provider**: Pluggable storage architecture supporting Google Drive cloud sync and local offline storage.

@@ -27,6 +27,7 @@
     "needsAttention": "La sincronización necesita atención",
     "conflictDetected": "Conflicto detectado",
     "syncNow": "Sincronizar Ahora",
+    "syncing": "Sincronizando...",
     "lastSynced": "Última sincronización: {time}",
     "neverSynced": "Aún no sincronizado"
   },
@@ -49,7 +50,14 @@
     "unavailableDesc": "No se pudo acceder a este Espacio.",
     "tryAgain": "Reintentar",
     "keepForLater": "Conservar para Después",
-    "remove": "Eliminar de este Dispositivo"
+    "remove": "Eliminar de este Dispositivo",
+    "deleteSpace": "Eliminar Espacio",
+    "leaveSpace": "Salir del Espacio",
+    "confirmDeleteSpaceTitle": "Eliminar Espacio",
+    "confirmDeleteSpaceDesc": "¿Estás seguro de que deseas eliminar \"{name}\"? Esto borrará permanentemente el espacio y todos sus elementos de Google Drive y de este dispositivo.",
+    "confirmLeaveSpaceTitle": "Salir del Espacio",
+    "confirmLeaveSpaceDesc": "¿Estás seguro de que deseas salir de \"{name}\"? Se eliminará de tu cuenta y dispositivo. El propietario conservará todos los datos del espacio.",
+    "deleting": "Eliminando..."
   },
   "capture": {
     "placeholder": "Escribe lo que sea... (ej. El médico dice continuar medicación, análisis en 2 semanas, papá programa el seguimiento)",
@@ -233,7 +241,13 @@
     "statusNotConfigured": "No Conectado (Inicia sesión con Google en Ajustes Globales)",
     "statusOffline": "Caché sin Conexión Habilitada",
     "saveChanges": "Guardar Ajustes del Espacio",
-    "savedSuccess": "¡Ajustes del espacio actualizados correctamente!"
+    "savedSuccess": "¡Ajustes del espacio actualizados correctamente!",
+    "dangerZone": "Zona de Peligro",
+    "dangerZoneDesc": "Acciones permanentes para este espacio.",
+    "deleteSpaceButton": "Eliminar Espacio",
+    "leaveSpaceButton": "Salir del Espacio",
+    "deleteSpaceWarning": "Elimina permanentemente este espacio y todos sus elementos de Google Drive y de este dispositivo.",
+    "leaveSpaceWarning": "Elimina este espacio de tu dispositivo y cuenta. El propietario conserva todos los datos."
   },
   "settings": {
     "title": "Ajustes Globales",
@@ -293,7 +307,15 @@
       }
     },
     "saveSettings": "Guardar Ajustes Globales",
-    "savedSuccess": "¡Ajustes guardados!"
+    "savedSuccess": "¡Ajustes guardados!",
+    "dangerZone": "Zona de Peligro",
+    "dangerZoneDesc": "Acciones irreversibles para tu cuenta y todos los datos.",
+    "deleteAccount": "Eliminar Cuenta y Borrar Todos los Datos",
+    "deleteAccountDesc": "Elimina permanentemente todos los datos de Google Drive (la carpeta LAD completa), borra el almacenamiento local de este dispositivo y cierra sesión.",
+    "confirmDeleteAccountTitle": "¿Eliminar permanentemente la cuenta y todos los datos?",
+    "confirmDeleteAccountDesc": "Esta acción es destructiva e irreversible. Eliminará permanentemente tu carpeta LAD en Google Drive, todos los espacios, elementos y datos locales.",
+    "confirmDeleteAccountButton": "Sí, Borrar Permanentemente Todos los Datos",
+    "erasingData": "Borrando todos los datos..."
   },
   "onboarding": {
     "step1": {

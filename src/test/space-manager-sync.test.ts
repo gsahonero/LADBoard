@@ -347,4 +347,119 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     expect(fallbackState.errorMessage).toContain('GDrive sync failed');
     expect(fallbackState.errorMessage).toContain('Preserved locally');
   });
+
+  it('skips default space creation when skipDefaultSpace option is true', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const regManager = new UserRegistryManager(localStorage);
+
+    const registry = await regManager.loadOrCreateRegistry('newuser@gmail.com', 'google', {
+      skipDefaultSpace: true,
+    });
+
+    expect(registry.spaces).toEqual([]);
+    expect(registry.identities[0].email).toBe('newuser@gmail.com');
+  });
+
+  it('deletes space from both local and remote storage when executed by owner', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const manager = new SpaceManager(localStorage, remoteStorage);
+
+    const space = await manager.createSpace({
+      spaceName: 'Owner Space to Delete',
+      createdByUserId: 'usr_owner',
+    });
+
+    const loaded = await manager.loadSpace(space.space_id, 'usr_owner');
+    const obj = loaded.objectStore.createObject({
+      title: 'Doc to be deleted',
+      actorUserId: 'usr_owner',
+    });
+    await loaded.objectStore.save(obj);
+    await remoteStorage.writeFile(`LAD/${space.space_id}/objects/${obj.object_id}.json`, obj);
+
+    // Verify files exist in both
+    expect(await localStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeDefined();
+    expect(await remoteStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeDefined();
+
+    // Owner deletes space
+    await manager.deleteSpace(space.space_id, 'usr_owner');
+
+    // Both local and remote space files are deleted
+    expect(await localStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeNull();
+    expect(await remoteStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeNull();
+    expect((await localStorage.listFiles(`LAD/${space.space_id}`)).length).toBe(0);
+    expect((await remoteStorage.listFiles(`LAD/${space.space_id}`)).length).toBe(0);
+  });
+
+  it('removes only local cached space files and preserves remote files when executed by collaborator', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const manager = new SpaceManager(localStorage, remoteStorage);
+
+    const space = await manager.createSpace({
+      spaceName: 'Collab Shared Space',
+      createdByUserId: 'usr_owner',
+    });
+
+    // Collaborator loads the space
+    await manager.loadSpace(space.space_id, 'usr_collab');
+    expect(await localStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeDefined();
+    expect(await remoteStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeDefined();
+
+    // Collaborator leaves space
+    await manager.deleteSpace(space.space_id, 'usr_collab');
+
+    // Local cached space files are deleted, but remote space files belonging to owner are intact!
+    expect(await localStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeNull();
+    expect(await remoteStorage.readFile(`LAD/${space.space_id}/manifest.json`)).toBeDefined();
+  });
+
+  it('synchronizes created objects from User A to User B via SyncCoordinator delta ops', async () => {
+    const remoteStorage = new MemoryStorageProvider();
+
+    // User A environment
+    const storageA = new MemoryStorageProvider();
+    const managerA = new SpaceManager(storageA, remoteStorage);
+    const spaceA = await managerA.createSpace({
+      spaceName: 'Collaborative Workspace',
+      createdByUserId: 'usr_alice',
+    });
+    const loadedA = await managerA.loadSpace(spaceA.space_id, 'usr_alice');
+
+    // User B environment
+    const storageB = new MemoryStorageProvider();
+    const managerB = new SpaceManager(storageB, remoteStorage);
+    const loadedB = await managerB.loadSpace(spaceA.space_id, 'usr_bob');
+
+    // Alice creates an object
+    const newDoc = loadedA.objectStore.createObject({
+      title: 'Project Roadmap 2026',
+      actorUserId: 'usr_alice',
+    });
+    await loadedA.objectStore.save(newDoc);
+    await loadedA.changeAggregator.commitImmediate({
+      targetId: newDoc.object_id,
+      type: 'object.create',
+      actor: 'usr_alice',
+      spaceId: spaceA.space_id,
+      patch: newDoc,
+    });
+
+    // Alice's SyncCoordinator pushes to remote
+    await loadedA.syncCoordinator.triggerSync();
+
+    // Verify object JSON was mirrored to remoteStorage
+    const remoteObj = await remoteStorage.readFile(`LAD/${spaceA.space_id}/objects/${newDoc.object_id}.json`);
+    expect(remoteObj).toBeDefined();
+    expect((remoteObj as any).title).toBe('Project Roadmap 2026');
+
+    // Bob pulls delta ops via his SyncCoordinator
+    await loadedB.syncCoordinator.triggerSync();
+
+    // Bob now has the object in his local objectStore!
+    const bobObj = loadedB.objectStore.get(newDoc.object_id);
+    expect(bobObj).toBeDefined();
+    expect(bobObj?.title).toBe('Project Roadmap 2026');
+  });
 });

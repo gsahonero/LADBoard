@@ -48,4 +48,14 @@ export interface IStorageProvider {
    * Ensures a directory path exists.
    */
   ensureDirectory(directoryPath: string): Promise<void>;
+
+  /**
+   * Deletes an entire directory and all files within it.
+   */
+  deleteDirectory(directoryPath: string): Promise<void>;
+
+  /**
+   * Clears all data within this storage provider.
+   */
+  clearAll?(): Promise<void>;
 }

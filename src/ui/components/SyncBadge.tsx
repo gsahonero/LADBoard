@@ -22,6 +22,11 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
           bg: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
         };
       case 'syncing':
+        return {
+          icon: <RefreshCw className="w-3.5 h-3.5 text-lad-500 animate-spin" />,
+          text: t('sync.syncing'),
+          bg: 'bg-lad-50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 border-lad-200 dark:border-lad-800',
+        };
       case 'saving_locally':
         return {
           icon: <RefreshCw className="w-3.5 h-3.5 text-lad-500 animate-spin" />,

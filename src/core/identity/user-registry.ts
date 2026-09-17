@@ -106,7 +106,11 @@ export class UserRegistryManager {
     return this.registry;
   }
 
-  async loadOrCreateRegistry(email?: string, provider: 'google' | 'local' = 'local'): Promise<LADUserRegistry> {
+  async loadOrCreateRegistry(
+    email?: string,
+    provider: 'google' | 'local' = 'local',
+    options?: { skipDefaultSpace?: boolean }
+  ): Promise<LADUserRegistry> {
     console.log('[LAD:UserRegistry] Loading user registry (email:', email, 'provider:', provider, ')...');
 
     let existing = await this.localStorage.readFile<LADUserRegistry>(this.registryPath);
@@ -154,7 +158,7 @@ export class UserRegistryManager {
     }
 
     // Initialize fresh user.json
-    console.log('[LAD:UserRegistry] Initializing fresh user.json...');
+    console.log('[LAD:UserRegistry] Initializing fresh user.json (skipDefaultSpace:', options?.skipDefaultSpace, ')...');
     const userId = this.generateUserId();
     const defaultSpaceId = this.generateSpaceId();
 
@@ -170,21 +174,23 @@ export class UserRegistryManager {
           display_name: email ? email.split('@')[0] : 'LAD User',
         },
       ],
-      spaces: [
-        {
-          space_id: defaultSpaceId,
-          space_name: 'Personal',
-          icon: '👤',
-          color: 'blue',
-          description: 'Personal life, health, finances & daily flow',
-          categories: ['health', 'finances', 'documents', 'shopping', 'home'],
-          storage_provider: provider === 'google' && this.remoteStorage ? 'google_drive' : 'local_indexeddb',
-          storage_reference: defaultSpaceId,
-          role: 'owner',
-          status: 'active',
-          last_synced_at: new Date().toISOString(),
-        },
-      ],
+      spaces: options?.skipDefaultSpace
+        ? []
+        : [
+            {
+              space_id: defaultSpaceId,
+              space_name: 'Personal',
+              icon: '👤',
+              color: 'blue',
+              description: 'Personal life, health, finances & daily flow',
+              categories: ['health', 'finances', 'documents', 'shopping', 'home'],
+              storage_provider: provider === 'google' && this.remoteStorage ? 'google_drive' : 'local_indexeddb',
+              storage_reference: defaultSpaceId,
+              role: 'owner',
+              status: 'active',
+              last_synced_at: new Date().toISOString(),
+            },
+          ],
       preferences: {
         locale: 'en',
         theme: 'system',

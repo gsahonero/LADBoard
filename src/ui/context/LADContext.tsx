@@ -71,6 +71,8 @@ export interface LADContextType {
   pendingJoinSpaceId: string | null;
   joinSpace: (spaceId: string) => Promise<boolean>;
   dismissPendingJoinSpace: () => void;
+  deleteSpace: (spaceId: string) => Promise<boolean>;
+  deleteAccount: () => Promise<boolean>;
   storageManager: StorageManager;
 
   // Objects & State
@@ -164,7 +166,24 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         storageManager.getRemoteProvider()
       );
 
-      const registry = await regManager.loadOrCreateRegistry(auth.user?.email, auth.user?.provider || 'local');
+      let joinSpaceId: string | null = null;
+      let spaceParam: string | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          joinSpaceId = params.get('join');
+          spaceParam = params.get('space');
+        } catch {
+          // Ignore
+        }
+      }
+
+      const isJoinInvite = Boolean(joinSpaceId && joinSpaceId.startsWith('spc_'));
+      const registry = await regManager.loadOrCreateRegistry(
+        auth.user?.email,
+        auth.user?.provider || 'local',
+        { skipDefaultSpace: isJoinInvite }
+      );
 
       if (!mounted) return;
       setUserRegistryManager(regManager);
@@ -180,41 +199,41 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let initialSpaceId = initialSpaceRef?.space_id || 'spc_default';
       let initialSpaceName = initialSpaceRef?.space_name || 'Personal';
 
-      if (typeof window !== 'undefined') {
+      if (spaceParam && spaceParam.startsWith('spc_')) {
+        const existingRef = registry.spaces.find((s) => s.space_id === spaceParam);
+        if (existingRef) {
+          initialSpaceRef = existingRef;
+          initialSpaceId = existingRef.space_id;
+          initialSpaceName = existingRef.space_name;
+        }
+      }
+
+      if (joinSpaceId && joinSpaceId.startsWith('spc_')) {
+        const existingRef = registry.spaces.find((s) => s.space_id === joinSpaceId);
+        if (existingRef) {
+          initialSpaceRef = existingRef;
+          initialSpaceId = existingRef.space_id;
+          initialSpaceName = existingRef.space_name;
+        } else {
+          // Open Join Space flow to verify identity before adding to registry
+          setPendingJoinSpaceId(joinSpaceId);
+        }
+      }
+
+      // Clean query params immediately so the URL address bar doesn't keep ?join= or ?space= across refreshes
+      if (typeof window !== 'undefined' && (joinSpaceId || spaceParam)) {
         try {
-          const params = new URLSearchParams(window.location.search);
-          const joinSpaceId = params.get('join');
-          const spaceParam = params.get('space');
-
-          if (spaceParam && spaceParam.startsWith('spc_')) {
-            const existingRef = registry.spaces.find((s) => s.space_id === spaceParam);
-            if (existingRef) {
-              initialSpaceRef = existingRef;
-              initialSpaceId = existingRef.space_id;
-              initialSpaceName = existingRef.space_name;
-            }
-          }
-
-          if (joinSpaceId && joinSpaceId.startsWith('spc_')) {
-            const existingRef = registry.spaces.find((s) => s.space_id === joinSpaceId);
-            if (existingRef) {
-              initialSpaceRef = existingRef;
-              initialSpaceId = existingRef.space_id;
-              initialSpaceName = existingRef.space_name;
-            } else {
-              // Open Join Space flow to verify identity before adding to registry
-              setPendingJoinSpaceId(joinSpaceId);
-            }
-          }
-
-          // Clean query params immediately so the URL address bar doesn't keep ?join= or ?space= across refreshes
-          if (joinSpaceId || spaceParam) {
-            const cleanUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, cleanUrl);
-          }
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
         } catch {
           // Ignore
         }
+      }
+
+      if (isJoinInvite && !registry.spaces.find((s) => s.space_id === joinSpaceId)) {
+        // Pending join invitation and user hasn't joined yet: do not initialize a phantom space
+        setIsLoading(false);
+        return;
       }
 
       const effectiveEmail =
@@ -589,6 +608,22 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await userRegistryManager.updateIdentity(auth.user.name, auth.user.email);
         }
 
+        // Clean up unrequested/empty Personal space if joining an invited space
+        const emptyPersonal = userRegistry.spaces.find(
+          (s) => s.space_name === 'Personal' && s.role === 'owner' && s.space_id !== spaceId
+        );
+        if (emptyPersonal) {
+          try {
+            const pSpace = await spaceManager.loadSpace(emptyPersonal.space_id, userRegistry.user_id);
+            if (pSpace.objectStore.getAll().length === 0 && pSpace.graphStore.getNodes().filter((n) => n.type === 'object').length === 0) {
+              await userRegistryManager.removeSpace(emptyPersonal.space_id);
+              await spaceManager.deleteSpace(emptyPersonal.space_id, userRegistry.user_id);
+            }
+          } catch (e) {
+            console.warn('[LAD:Context] Failed to cleanup empty default space:', e);
+          }
+        }
+
         setUserRegistry({ ...userRegistryManager.getRegistry()! });
 
         // Mark as onboarded so the user is never prompted to create their first space after joining
@@ -618,13 +653,81 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [spaceManager, userRegistry, userRegistryManager, authService, storageManager]
   );
 
-  const dismissPendingJoinSpace = useCallback(() => {
+  const dismissPendingJoinSpace = useCallback(async () => {
     setPendingJoinSpaceId(null);
     if (typeof window !== 'undefined') {
       const cleanUrl = window.location.origin + window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
     }
-  }, []);
+    if (userRegistry && userRegistry.spaces.length === 0 && spaceManager && userRegistryManager) {
+      await createSpace('Personal', 'Personal life, health, finances & daily flow');
+    }
+  }, [userRegistry, spaceManager, userRegistryManager, createSpace]);
+
+  const deleteSpace = useCallback(
+    async (spaceId: string): Promise<boolean> => {
+      if (!spaceManager || !userRegistry || !userRegistryManager) return false;
+      try {
+        console.log(`[LAD:Context] Deleting / leaving space "${spaceId}"...`);
+        // Remove space from storage (local + remote if owner)
+        await spaceManager.deleteSpace(spaceId, userRegistry.user_id);
+
+        // Remove from registry
+        await userRegistryManager.removeSpace(spaceId);
+        const updatedReg = userRegistryManager.getRegistry();
+        if (updatedReg) {
+          setUserRegistry({ ...updatedReg });
+        }
+
+        // If active space was deleted, switch to next available or create a default space
+        if (activeSpace?.manifest.space_id === spaceId) {
+          const remaining = updatedReg?.spaces || [];
+          if (remaining.length > 0) {
+            await switchSpace(remaining[0].space_id);
+          } else {
+            // Fresh default Personal space
+            await createSpace('Personal', 'Personal life, health, finances & daily flow');
+          }
+        }
+        return true;
+      } catch (err) {
+        console.error(`[LAD:Context] Failed to delete space ${spaceId}:`, err);
+        return false;
+      }
+    },
+    [spaceManager, userRegistry, userRegistryManager, activeSpace, switchSpace, createSpace]
+  );
+
+  const deleteAccount = useCallback(async (): Promise<boolean> => {
+    try {
+      console.log('[LAD:Context] Initiating account deletion and complete data erasure...');
+      if (activeSpace) {
+        activeSpace.syncCoordinator.stopPeriodicSync();
+      }
+
+      // Erase all data: remote Google Drive LAD folder + local IndexedDB + localStorage lad_*
+      await storageManager.eraseAllData();
+
+      // Sign out auth service
+      await authService.signOut();
+
+      // Reset state
+      setUserRegistry(null);
+      setActiveSpace(null);
+      setObjects([]);
+      setNodes([]);
+      setEdges([]);
+      setOperations([]);
+
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+      return true;
+    } catch (err) {
+      console.error('[LAD:Context] Error during account deletion:', err);
+      return false;
+    }
+  }, [activeSpace, storageManager, authService]);
 
   const createObjectFromCapture = useCallback(
     async (structure: InferredStructure): Promise<LADObject> => {
@@ -1076,6 +1179,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         pendingJoinSpaceId,
         joinSpace,
         dismissPendingJoinSpace,
+        deleteSpace,
+        deleteAccount,
         storageManager,
         objects,
         createObjectFromCapture,

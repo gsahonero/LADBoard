@@ -31,3 +31,21 @@ If you wish to sync your Spaces across devices using your own Google Drive:
    - Open LAD Board Settings (*⚙ Settings* in the navigation bar).
    - Enter your `OAuth2 Client ID` in the **Google Account** section.
    - Click **Sign in with Google** to authorize.
+
+---
+
+## 3. Synchronization & Offline Fallback
+
+- **Default Remote Sync**: Once authenticated with Google, all active spaces default to Google Drive cloud sync.
+- **Commit Threshold Auto-Sync**: When you edit an item, the change aggregator commits after your configured pause (default: 5 seconds), automatically triggering background synchronization to push updated JSON files (`objects/*.json`, `graph/nodes.json`, `graph/edges.json`) and delta operations.
+- **Resilient Fallback**: If Google Drive encounters network interruptions or token timeouts, LAD Board seamlessly falls back to local IndexedDB persistence, queuing all operations in the `offlineQueue` without data loss.
+
+---
+
+## 4. Deletion & Data Erasure Lifecycle
+
+- **Delete Space**:
+  - If you are the space owner, deleting a space removes `LAD/${spaceId}` from Google Drive and purges local device storage.
+  - If you are a collaborator, leaving a space cleans your local cache while preserving the owner's files in Google Drive.
+- **Delete Account & Complete Data Erasure**:
+  - Found under *Settings > Danger Zone*, this option permanently deletes the root `LAD` directory in your Google Drive, wipes all local IndexedDB stores, and signs out.

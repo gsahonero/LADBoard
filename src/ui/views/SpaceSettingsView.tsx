@@ -23,6 +23,9 @@ import {
   Cloud,
   Loader2,
   AlertCircle,
+  Trash2,
+  LogOut,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface SpaceSettingsViewProps {
@@ -32,8 +35,24 @@ interface SpaceSettingsViewProps {
 export { getShareableJoinUrl };
 
 export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchToGlobal }) => {
-  const { activeManifest, updateSpaceIdentity, objects, authService, repairSpaceDriveFiles } = useLAD();
+  const {
+    activeManifest,
+    updateSpaceIdentity,
+    objects,
+    authService,
+    repairSpaceDriveFiles,
+    deleteSpace,
+    currentUserId,
+    userRegistry,
+  } = useLAD();
   const { t } = useI18n();
+
+  const isOwner =
+    activeManifest?.created_by === currentUserId ||
+    userRegistry?.spaces.find((s) => s.space_id === activeManifest?.space_id)?.role === 'owner';
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Space Identity State
   const [spaceName, setSpaceName] = useState(activeManifest?.space_name || '');
@@ -802,6 +821,103 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           {isSaving ? 'Saving...' : t('spaceSettings.saveChanges')}
         </button>
       </div>
+
+      {/* Danger Zone */}
+      <div className="p-6 bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 rounded-3xl space-y-4 mt-6">
+        <div>
+          <h2 className="text-sm font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            {t('spaceSettings.dangerZone')}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {t('spaceSettings.dangerZoneDesc')}
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-rose-200/80 dark:border-rose-900/50">
+          <div className="space-y-0.5">
+            <div className="text-xs font-bold text-slate-900 dark:text-white">
+              {isOwner ? t('spaceSettings.deleteSpaceButton') : t('spaceSettings.leaveSpaceButton')}
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {isOwner ? t('spaceSettings.deleteSpaceWarning') : t('spaceSettings.leaveSpaceWarning')}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl transition-all cursor-pointer shrink-0"
+          >
+            {isOwner ? <Trash2 className="w-3.5 h-3.5" /> : <LogOut className="w-3.5 h-3.5" />}
+            <span>{isOwner ? t('spaceSettings.deleteSpaceButton') : t('spaceSettings.leaveSpaceButton')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Delete / Leave Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {isOwner ? t('spaces.confirmDeleteSpaceTitle') : t('spaces.confirmLeaveSpaceTitle')}
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeManifest?.space_name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {isOwner
+                ? t('spaces.confirmDeleteSpaceDesc', { name: activeManifest?.space_name || '' })
+                : t('spaces.confirmLeaveSpaceDesc', { name: activeManifest?.space_name || '' })}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!activeManifest?.space_id) return;
+                  setIsDeleting(true);
+                  try {
+                    await deleteSpace(activeManifest.space_id);
+                    setShowDeleteConfirm(false);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{t('spaces.deleting')}</span>
+                  </>
+                ) : isOwner ? (
+                  t('spaces.deleteSpace')
+                ) : (
+                  t('spaces.leaveSpace')
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

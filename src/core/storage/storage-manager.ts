@@ -57,6 +57,40 @@ export class StorageManager {
     await this.localProvider.deleteFile(path);
   }
 
+  async deleteDirectory(directoryPath: string): Promise<void> {
+    await this.localProvider.deleteDirectory(directoryPath);
+    if (this.remoteProvider) {
+      await this.remoteProvider.deleteDirectory(directoryPath);
+    }
+  }
+
+  /**
+   * Permanently erases all local IndexedDB and remote Google Drive LAD data
+   */
+  async eraseAllData(): Promise<void> {
+    console.log('[LAD:StorageManager] ⚠️ Erasing all local and remote data...');
+    if (this.remoteProvider && 'deleteRootFolder' in this.remoteProvider) {
+      try {
+        await (this.remoteProvider as any).deleteRootFolder();
+      } catch (e) {
+        console.warn('Error deleting remote root folder:', e);
+      }
+    }
+    if (this.localProvider.clearAll) {
+      await this.localProvider.clearAll();
+    }
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('lad_') || key === 'i18nextLng')) {
+          keysToRemove.push(key);
+        }
+      }
+      for (const k of keysToRemove) localStorage.removeItem(k);
+    }
+  }
+
   async list(directoryPath: string) {
     return this.localProvider.listFiles(directoryPath);
   }

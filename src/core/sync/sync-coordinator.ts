@@ -8,6 +8,8 @@ import { OperationLog } from '../operations/operation-log';
 import { ConflictResolver } from './conflict-resolver';
 import { SyncState } from './types';
 import { LADOperation } from '../standard/types';
+import { ObjectStore } from '../objects/object-store';
+import { GraphStore } from '../graph/graph-store';
 
 export class SyncCoordinator {
   private spaceId: string;
@@ -15,6 +17,8 @@ export class SyncCoordinator {
   private remoteStorage: IStorageProvider | null;
   private offlineQueue: OfflineQueue;
   private operationLog: OperationLog;
+  private objectStore?: ObjectStore;
+  private graphStore?: GraphStore;
   private onRemoteOperationsApplied?: (ops: LADOperation[]) => Promise<void>;
 
   private state: SyncState = {
@@ -35,6 +39,8 @@ export class SyncCoordinator {
     remoteStorage?: IStorageProvider | null;
     offlineQueue: OfflineQueue;
     operationLog: OperationLog;
+    objectStore?: ObjectStore;
+    graphStore?: GraphStore;
     onRemoteOperationsApplied?: (ops: LADOperation[]) => Promise<void>;
   }) {
     this.spaceId = params.spaceId;
@@ -42,6 +48,8 @@ export class SyncCoordinator {
     this.remoteStorage = params.remoteStorage || null;
     this.offlineQueue = params.offlineQueue;
     this.operationLog = params.operationLog;
+    this.objectStore = params.objectStore;
+    this.graphStore = params.graphStore;
     this.onRemoteOperationsApplied = params.onRemoteOperationsApplied;
 
     this.setupNetworkListeners();
@@ -143,6 +151,33 @@ export class SyncCoordinator {
             }
           }
 
+          // Push corresponding object or graph files to remote storage
+          try {
+            if (localOp.type.startsWith('object.')) {
+              if (localOp.type === 'object.delete') {
+                try {
+                  await this.remoteStorage.deleteFile(`LAD/${this.spaceId}/objects/${localOp.target}.json`);
+                } catch {
+                  // ignore if not found on remote
+                }
+              } else {
+                const obj =
+                  this.objectStore?.get(localOp.target) ||
+                  (await this.localStorage.readFile(`LAD/${this.spaceId}/objects/${localOp.target}.json`));
+                if (obj) {
+                  await this.remoteStorage.writeFile(`LAD/${this.spaceId}/objects/${localOp.target}.json`, obj);
+                }
+              }
+            } else if (localOp.type.startsWith('graph.') || localOp.type.startsWith('membership.')) {
+              const nodes = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (nodes) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, nodes);
+              const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (edges) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, edges);
+            }
+          } catch (fileErr) {
+            console.warn(`[LAD:SyncCoordinator] Warning syncing file for op ${localOp.operation_id}:`, fileErr);
+          }
+
           // Append to remote log and remove from offline queue
           await remoteOpLog.append(localOp);
           await this.offlineQueue.remove(localOp.operation_id);
@@ -160,6 +195,37 @@ export class SyncCoordinator {
       if (newRemoteOps.length > 0) {
         for (const newOp of newRemoteOps) {
           await this.operationLog.append(newOp);
+
+          // Apply remote operation data locally
+          try {
+            if (newOp.type.startsWith('object.')) {
+              if (newOp.type === 'object.delete') {
+                if (this.objectStore) {
+                  await this.objectStore.delete(newOp.target);
+                } else {
+                  await this.localStorage.deleteFile(`LAD/${this.spaceId}/objects/${newOp.target}.json`);
+                }
+              } else {
+                const remoteObj = await this.remoteStorage.readFile(`LAD/${this.spaceId}/objects/${newOp.target}.json`);
+                if (remoteObj) {
+                  await this.localStorage.writeFile(`LAD/${this.spaceId}/objects/${newOp.target}.json`, remoteObj);
+                  if (this.objectStore) {
+                    await this.objectStore.loadAll();
+                  }
+                }
+              }
+            } else if (newOp.type.startsWith('graph.') || newOp.type.startsWith('membership.')) {
+              const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (remoteNodes) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
+              const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (remoteEdges) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
+              if (this.graphStore) {
+                await this.graphStore.load();
+              }
+            }
+          } catch (applyErr) {
+            console.warn(`[LAD:SyncCoordinator] Warning applying remote op ${newOp.operation_id}:`, applyErr);
+          }
         }
         if (this.onRemoteOperationsApplied) {
           await this.onRemoteOperationsApplied(newRemoteOps);

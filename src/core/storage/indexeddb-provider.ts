@@ -184,4 +184,51 @@ export class IndexedDBStorageProvider implements IStorageProvider {
   async ensureDirectory(_directoryPath: string): Promise<void> {
     // Virtual directories in key-value store
   }
+
+  async deleteDirectory(directoryPath: string): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) return;
+
+    const normDir = this.normalize(directoryPath);
+    const prefix = `${normDir}/`;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = this.db!.transaction('files', 'readwrite');
+        const store = tx.objectStore('files');
+        const req = store.getAll();
+
+        req.onsuccess = () => {
+          const entries: Array<{ path: string }> = req.result || [];
+          for (const entry of entries) {
+            if (entry.path === normDir || entry.path.startsWith(prefix)) {
+              store.delete(entry.path);
+            }
+          }
+        };
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async clearAll(): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = this.db!.transaction('files', 'readwrite');
+        const store = tx.objectStore('files');
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
 }
