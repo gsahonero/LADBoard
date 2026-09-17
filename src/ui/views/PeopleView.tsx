@@ -5,11 +5,11 @@
 import React, { useState } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
-import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle, Loader2, UserMinus, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const PeopleView: React.FC = () => {
-  const { nodes, inviteMember, userRegistry, authService } = useLAD();
+  const { nodes, inviteMember, removeMember, activeManifest, userRegistry, authService } = useLAD();
   const { t } = useI18n();
   const auth = authService.getState();
 
@@ -18,10 +18,33 @@ export const PeopleView: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<'owner' | 'editor' | 'viewer'>('editor');
   const [isSending, setIsSending] = useState(false);
   const [reinvitingId, setReinvitingId] = useState<string | null>(null);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [warningMsg, setWarningMsg] = useState('');
 
   const userNodes = nodes.filter((n) => n.type === 'user');
+
+  const handleRemoveUser = async (nodeId: string, name: string, email?: string) => {
+    if (removingId) return;
+    setRemovingId(nodeId);
+    setConfirmingRemoveId(null);
+    try {
+      const res = await removeMember(nodeId, email);
+      if (res.success) {
+        setSuccessMsg(t('peopleView.removeUserSuccess', { name }));
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setWarningMsg(res.warning || 'Failed to remove user from space');
+        setTimeout(() => setWarningMsg(''), 7000);
+      }
+    } catch (err: any) {
+      setWarningMsg(err.message || 'Error removing user');
+      setTimeout(() => setWarningMsg(''), 7000);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   const handleSendInvite = async () => {
     if (!inviteEmail.trim() || isSending) return;
@@ -201,6 +224,14 @@ export const PeopleView: React.FC = () => {
                 (Boolean(auth.isAuthenticated && auth.user?.email && userEmail) &&
                   userEmail?.toLowerCase() === auth.user?.email?.toLowerCase()));
 
+            const isPrimaryOwner =
+              Boolean(activeManifest?.created_by) &&
+              (user.ref_id === activeManifest?.created_by ||
+                user.node_id === `node_${activeManifest?.created_by}` ||
+                user.node_id === activeManifest?.created_by);
+
+            const canRemove = !isCurrentUser && !isPrimaryOwner;
+
             if (isCurrentUser) {
               if (auth.isAuthenticated && auth.user?.email) {
                 userEmail = auth.user.email;
@@ -336,6 +367,54 @@ export const PeopleView: React.FC = () => {
                           : t('peopleView.reinvite')}
                       </span>
                     </button>
+                  )}
+
+                  {/* Remove User Button & Confirmation for removable members */}
+                  {canRemove && (
+                    confirmingRemoveId === user.node_id ? (
+                      <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 p-1 rounded-xl border border-rose-200 dark:border-rose-900/60 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUser(user.node_id, userName, userEmail)}
+                          disabled={removingId === user.node_id}
+                          className="px-2 py-1 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-xs disabled:opacity-50"
+                        >
+                          {removingId === user.node_id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>{t('peopleView.confirmRemove')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingRemoveId(null)}
+                          disabled={removingId === user.node_id}
+                          className="px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                        >
+                          {t('peopleView.cancel')}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingRemoveId(user.node_id)}
+                        disabled={Boolean(removingId)}
+                        title={t('peopleView.removeUser')}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/80 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                      >
+                        {removingId === user.node_id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                        ) : (
+                          <UserMinus className="w-3.5 h-3.5" />
+                        )}
+                        <span className="hidden sm:inline">
+                          {removingId === user.node_id
+                            ? t('peopleView.removingUser')
+                            : t('peopleView.removeUser')}
+                        </span>
+                      </button>
+                    )
                   )}
                 </div>
               </div>

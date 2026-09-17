@@ -434,6 +434,99 @@ export class SpaceManager {
   }
 
   /**
+   * Removes a member from a space, updating all configuration data:
+   * graph nodes, graph edges, object assignments, manifest timestamp,
+   * delta operation log, and synchronizing with remote storage.
+   */
+  async removeMember(
+    spaceId: string,
+    actorUserId: string,
+    targetUserNodeId: string
+  ): Promise<{ success: boolean; removedEmail?: string; error?: string }> {
+    const space = await this.loadSpace(spaceId, actorUserId);
+
+    // 1. Locate the target user node in graphStore
+    const node = space.graphStore.getNodes().find(
+      (n) => n.node_id === targetUserNodeId || n.ref_id === targetUserNodeId
+    );
+
+    if (!node) {
+      return { success: false, error: 'User not found in space graph' };
+    }
+
+    // 2. Protect primary space creator from removal
+    if (
+      space.manifest.created_by &&
+      (node.ref_id === space.manifest.created_by ||
+        node.node_id === `node_${space.manifest.created_by}` ||
+        node.node_id === space.manifest.created_by)
+    ) {
+      return { success: false, error: 'Cannot remove the primary space creator' };
+    }
+
+    const removedEmail = node.metadata?.email || (node.label.includes('@') ? node.label : undefined);
+    const removedName = node.metadata?.invited_name || node.metadata?.name || node.label;
+    const removedRole = node.metadata?.role || 'editor';
+
+    // 3. Unassign any objects referencing this user
+    const userIdentifiers = new Set(
+      [
+        node.node_id,
+        node.ref_id,
+        node.metadata?.email,
+        node.metadata?.name,
+        node.metadata?.invited_name,
+        node.label,
+      ].filter(Boolean) as string[]
+    );
+
+    for (const obj of space.objectStore.getAll()) {
+      if (obj.assigned_to && userIdentifiers.has(obj.assigned_to)) {
+        await space.objectStore.update(obj.object_id, {
+          assigned_to: undefined,
+        });
+      }
+    }
+
+    // 4. Remove node and all associated edges from graphStore
+    await space.graphStore.removeNode(node.node_id);
+
+    // 5. Update space manifest timestamp and save
+    space.manifest.updated_at = new Date().toISOString();
+    await this.localStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
+
+    // 6. Commit delta operation to changeAggregator
+    await space.changeAggregator.commitImmediate({
+      targetId: node.node_id,
+      type: 'membership.remove',
+      actor: actorUserId,
+      spaceId,
+      patch: {
+        node_id: node.node_id,
+        ref_id: node.ref_id,
+        name: removedName,
+        email: removedEmail,
+        role: removedRole,
+      } as any,
+    });
+
+    // 7. Synchronize updated graph & manifest to remote storage if connected
+    if (this.remoteStorage) {
+      try {
+        console.log(`[LAD:SpaceManager] Syncing member removal to Google Drive for space ${spaceId}...`);
+        await this.remoteStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/nodes.json`, space.graphStore.getNodes());
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/edges.json`, space.graphStore.getEdges());
+        console.log(`[LAD:SpaceManager] ✅ Synced member removal to Google Drive`);
+      } catch (err) {
+        console.warn(`[LAD:SpaceManager] Could not sync member removal to remote storage:`, err);
+      }
+    }
+
+    return { success: true, removedEmail };
+  }
+
+  /**
    * Uploads and repairs all space data (manifest, graph, objects, operations) on Google Drive
    */
   async repairAndUploadSpaceToRemote(

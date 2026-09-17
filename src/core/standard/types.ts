@@ -160,7 +160,8 @@ export type LADOperationType =
   | 'space.manifest.update'
   | 'invitation.create'
   | 'invitation.accept'
-  | 'membership.accept';
+  | 'membership.accept'
+  | 'membership.remove';
 
 export interface LADOperation {
   operation_id: string; // "op_..."

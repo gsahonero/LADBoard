@@ -194,7 +194,14 @@
     "reinviting": "Enviando...",
     "reinviteSuccess": "¡Invitación reenviada a {email}!",
     "acceptInvitation": "Aceptar",
-    "declineInvitation": "Rechazar"
+    "declineInvitation": "Rechazar",
+    "removeUser": "Eliminar Usuario",
+    "removeUserConfirm": "¿Estás seguro de que deseas eliminar a {name} de este Espacio? Se revocarán todos sus accesos y configuraciones asociadas.",
+    "removeUserSuccess": "{name} fue eliminado con éxito de este Espacio.",
+    "removingUser": "Eliminando...",
+    "confirmRemove": "Sí, Eliminar",
+    "cancel": "Cancelar",
+    "cannotRemoveOwner": "No se puede eliminar al propietario principal del Espacio."
   },
   "historyView": {
     "title": "Historial de Actividad",

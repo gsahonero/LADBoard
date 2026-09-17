@@ -77,6 +77,21 @@ export class ObjectStore {
     return removed;
   }
 
+  async update(objectId: string, updates: Partial<LADObject>): Promise<LADObject | null> {
+    const existing = this.objects.get(objectId);
+    if (!existing) return null;
+    const updated: LADObject = {
+      ...existing,
+      ...updates,
+      updated_at: new Date().toISOString(),
+      version: (existing.version || 1) + 1,
+    };
+    validateLADObject(updated);
+    this.objects.set(objectId, updated);
+    await this.storage.writeFile(this.getObjectPath(objectId), updated);
+    return updated;
+  }
+
   createObject(params: {
     title: string;
     description?: string;

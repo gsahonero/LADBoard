@@ -100,6 +100,70 @@ export async function shareSpaceDriveFolder(
 }
 
 /**
+ * Revokes Google Drive folder permissions for a user by email
+ */
+export async function revokeSpaceDrivePermission(
+  accessToken: string,
+  folderId: string,
+  targetEmail: string
+): Promise<{ success: boolean; error?: string }> {
+  console.log(`[LAD:Sharing] 🚫 Revoking Google Drive folder ${folderId} permission for ${targetEmail}...`);
+  try {
+    const listUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+      folderId
+    )}/permissions?fields=permissions(id,emailAddress,role)&supportsAllDrives=true`;
+
+    const listRes = await fetch(listUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!listRes.ok) {
+      const errJson = await listRes.json().catch(() => ({}));
+      const errorMsg = errJson.error?.message || `Google Drive list permissions error: ${listRes.statusText}`;
+      console.warn(`[LAD:Sharing] Could not list permissions for folder ${folderId}:`, errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    const data = await listRes.json();
+    const permissions: Array<{ id: string; emailAddress?: string }> = data.permissions || [];
+    const targetPerm = permissions.find(
+      (p) => (p.emailAddress || '').toLowerCase().trim() === targetEmail.toLowerCase().trim()
+    );
+
+    if (!targetPerm) {
+      console.log(`[LAD:Sharing] No active Drive permission found for ${targetEmail}`);
+      return { success: true };
+    }
+
+    const deleteUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+      folderId
+    )}/permissions/${encodeURIComponent(targetPerm.id)}?supportsAllDrives=true`;
+
+    const delRes = await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!delRes.ok && delRes.status !== 204 && delRes.status !== 404) {
+      const errJson = await delRes.json().catch(() => ({}));
+      const errorMsg = errJson.error?.message || `Google Drive revoke permission error: ${delRes.statusText}`;
+      console.warn(`[LAD:Sharing] Failed to delete permission ${targetPerm.id}:`, errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    console.log(`[LAD:Sharing] ✅ Successfully revoked Google Drive permission for ${targetEmail}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[LAD:Sharing] ❌ Exception in revokeSpaceDrivePermission:`, err);
+    return { success: false, error: err.message || 'Failed to revoke Google Drive permission' };
+  }
+}
+
+/**
  * Helper to encode string to RFC 4648 Base64URL
  */
 function base64UrlEncode(str: string): string {

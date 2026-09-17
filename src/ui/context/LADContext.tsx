@@ -17,6 +17,7 @@ import { PaletteManager } from '../../core/theme/palette-manager';
 import { DEFAULT_GDRIVE_CLIENT_ID } from '../../core/standard/constants';
 import {
   shareSpaceDriveFolder,
+  revokeSpaceDrivePermission,
   sendGmailInvitation,
   getShareableJoinUrl,
 } from '../../core/sharing/google-sharing-service';
@@ -57,6 +58,10 @@ export interface LADContextType {
     role?: 'owner' | 'editor' | 'viewer',
     name?: string
   ) => Promise<{ success: boolean; gmailSent: boolean; driveShared: boolean; warning?: string }>;
+  removeMember: (
+    nodeId: string,
+    email?: string
+  ) => Promise<{ success: boolean; driveRevoked: boolean; warning?: string }>;
   repairSpaceDriveFiles: (spaceId?: string) => Promise<{
     success: boolean;
     manifestUploaded: boolean;
@@ -567,6 +572,73 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       refreshSpaceState();
       return { success: true, gmailSent, driveShared, warning };
+    },
+    [spaceManager, activeSpace, userRegistry, authService, storageManager, refreshSpaceState]
+  );
+
+  const removeMember = useCallback(
+    async (
+      nodeId: string,
+      email?: string
+    ): Promise<{ success: boolean; driveRevoked: boolean; warning?: string }> => {
+      if (!spaceManager || !activeSpace || !userRegistry) {
+        return { success: false, driveRevoked: false, warning: 'Space not initialized' };
+      }
+
+      // 1. Remove member from Space graph, edges, objects, and remote files
+      const res = await spaceManager.removeMember(
+        activeSpace.manifest.space_id,
+        userRegistry.user_id,
+        nodeId
+      );
+
+      if (!res.success) {
+        return { success: false, driveRevoked: false, warning: res.error || 'Failed to remove user' };
+      }
+
+      let driveRevoked = false;
+      let warning: string | undefined;
+
+      // 2. Revoke Google Drive folder permissions if Google Auth is active
+      const targetEmail = email || res.removedEmail;
+      const auth = authService.getState();
+      const accessToken = auth.user?.accessToken;
+      const isExpired = authService.isTokenExpired();
+
+      if (auth.isAuthenticated && accessToken && !isExpired && auth.user?.provider === 'google' && targetEmail) {
+        const remoteProvider = storageManager.getRemoteProvider();
+        let folderId: string | undefined;
+
+        if (remoteProvider && 'resolveFolderPath' in remoteProvider) {
+          try {
+            folderId = await (remoteProvider as any).resolveFolderPath(`LAD/${activeSpace.manifest.space_id}`);
+          } catch (e: any) {
+            console.warn('[LAD:Context] Could not resolve GDrive folder ID for revocation:', e);
+          }
+        }
+
+        if (folderId) {
+          try {
+            const revokeRes = await revokeSpaceDrivePermission(accessToken, folderId, targetEmail);
+            if (revokeRes.success) {
+              driveRevoked = true;
+            } else if (revokeRes.error) {
+              warning = revokeRes.error;
+            }
+          } catch (e: any) {
+            console.warn('[LAD:Context] Revoke Google Drive folder permission failed:', e);
+            warning = e.message;
+          }
+        }
+      }
+
+      // Refresh in-memory state and trigger sync
+      refreshSpaceState();
+      activeSpace.syncCoordinator.triggerSync({ silent: false }).catch((err) => {
+        console.warn('[LAD:Context] Sync after removeMember failed:', err);
+      });
+
+      return { success: true, driveRevoked, warning };
     },
     [spaceManager, activeSpace, userRegistry, authService, storageManager, refreshSpaceState]
   );
@@ -1204,6 +1276,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateSpaceSettings,
         renameSpace,
         inviteMember,
+        removeMember,
         repairSpaceDriveFiles,
         pendingJoinSpaceId,
         joinSpace,

@@ -194,7 +194,14 @@
     "reinviting": "Sending...",
     "reinviteSuccess": "Invitation resent to {email}!",
     "acceptInvitation": "Accept",
-    "declineInvitation": "Decline"
+    "declineInvitation": "Decline",
+    "removeUser": "Remove User",
+    "removeUserConfirm": "Are you sure you want to remove {name} from this Space? All access and configuration associations will be revoked.",
+    "removeUserSuccess": "{name} was successfully removed from this Space.",
+    "removingUser": "Removing...",
+    "confirmRemove": "Yes, Remove",
+    "cancel": "Cancel",
+    "cannotRemoveOwner": "The primary Space owner cannot be removed."
   },
   "historyView": {
     "title": "Activity History",
