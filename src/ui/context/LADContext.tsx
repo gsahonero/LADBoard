@@ -303,6 +303,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       } else if (state.status === 'synced') {
         activeSpace.activeEngine.dismissAlert('alert_sync_fallback');
+        // Refresh space state on successful sync (manifest, objects, graph)
+        setObjects(activeSpace.objectStore.getAll());
+        setNodes(activeSpace.graphStore.getNodes());
+        setEdges(activeSpace.graphStore.getEdges());
+        setOperations(activeSpace.operationLog.getOperations());
+        setActiveSpace((prev) => (prev ? { ...prev, manifest: { ...activeSpace.manifest } } : null));
       }
     });
 
@@ -314,7 +320,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubSync();
       activeSpace.syncCoordinator.stopPeriodicSync();
     };
-  }, [activeSpace]);
+  }, [activeSpace?.manifest.space_id]);
 
   const refreshSpaceState = useCallback(() => {
     if (!activeSpace) return;
@@ -322,6 +328,9 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNodes(activeSpace.graphStore.getNodes());
     setEdges(activeSpace.graphStore.getEdges());
     setOperations(activeSpace.operationLog.getOperations());
+    if (activeSpace.manifest) {
+      setActiveSpace((prev) => (prev ? { ...prev, manifest: { ...activeSpace.manifest } } : null));
+    }
   }, [activeSpace]);
 
   const switchSpace = useCallback(
@@ -420,7 +429,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
       if (!spaceManager || !userRegistryManager) return;
       await userRegistryManager.updateSpaceIdentity(spaceId, patch);
-      const updatedManifest = await spaceManager.updateSpaceManifest(spaceId, patch);
+      const actor = userRegistryManager.getRegistry()?.user_id;
+      const updatedManifest = await spaceManager.updateSpaceManifest(spaceId, patch, actor);
       setUserRegistry({ ...userRegistryManager.getRegistry()! });
 
       if (activeSpace && activeSpace.manifest.space_id === spaceId) {

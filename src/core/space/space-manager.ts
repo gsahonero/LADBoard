@@ -244,7 +244,17 @@ export class SpaceManager {
       operationLog,
       objectStore,
       graphStore,
-      onRemoteOperationsApplied: async (_ops) => {
+      onRemoteOperationsApplied: async (ops) => {
+        // If space manifest or settings were updated remotely, reload the manifest
+        const hasManifestUpdate = ops.some(
+          (op) => op.type === 'space.manifest.update' || op.type.startsWith('membership.')
+        );
+        if (hasManifestUpdate) {
+          const freshManifest = await this.localStorage.readFile<LADSpaceManifest>(this.getManifestPath(spaceId));
+          if (freshManifest && this.loadedSpaces.has(spaceId)) {
+            this.loadedSpaces.get(spaceId)!.manifest = freshManifest;
+          }
+        }
         // Reload local memory
         await objectStore.loadAll();
         await graphStore.load();
@@ -516,7 +526,8 @@ export class SpaceManager {
    */
   async updateSpaceManifest(
     spaceId: string,
-    patch: Partial<Pick<LADSpaceManifest, 'space_name' | 'icon' | 'color' | 'description' | 'categories' | 'settings'>>
+    patch: Partial<Pick<LADSpaceManifest, 'space_name' | 'icon' | 'color' | 'description' | 'categories' | 'settings'>>,
+    actor?: string
   ): Promise<LADSpaceManifest> {
     const loaded = this.loadedSpaces.get(spaceId);
     let manifest = loaded
@@ -540,7 +551,17 @@ export class SpaceManager {
     }
 
     await this.localStorage.writeFile(this.getManifestPath(spaceId), manifest);
-    if (this.remoteStorage) {
+
+    // Commit a space.manifest.update operation to the version control system
+    if (loaded) {
+      await loaded.changeAggregator.commitImmediate({
+        targetId: spaceId,
+        type: 'space.manifest.update',
+        actor: actor || manifest.created_by,
+        spaceId,
+        patch,
+      });
+    } else if (this.remoteStorage) {
       await this.remoteStorage.writeFile(this.getManifestPath(spaceId), manifest);
     }
 

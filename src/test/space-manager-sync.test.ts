@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { SpaceManager } from '../core/space/space-manager';
 import { MemoryStorageProvider } from '../core/storage/memory-provider';
 import { ConflictResolver } from '../core/sync/conflict-resolver';
 import { LADOperation } from '../core/standard/types';
 import { UserRegistryManager } from '../core/identity/user-registry';
+import { OperationLog } from '../core/operations/operation-log';
 
 describe('Space Manager, Offline Queue & Conflict Resolver', () => {
   it('creates and loads a new Space with standard layout', async () => {
@@ -461,5 +462,125 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     const bobObj = loadedB.objectStore.get(newDoc.object_id);
     expect(bobObj).toBeDefined();
     expect(bobObj?.title).toBe('Project Roadmap 2026');
+  });
+
+  it('synchronizes space manifest and settings updates from User A to User B via SyncCoordinator delta ops', async () => {
+    const remoteStorage = new MemoryStorageProvider();
+
+    // User A environment
+    const storageA = new MemoryStorageProvider();
+    const managerA = new SpaceManager(storageA, remoteStorage);
+    const spaceA = await managerA.createSpace({
+      spaceName: 'Initial Team Space',
+      description: 'Initial description',
+      createdByUserId: 'usr_alice',
+    });
+    const loadedA = await managerA.loadSpace(spaceA.space_id, 'usr_alice');
+
+    // User B environment
+    const storageB = new MemoryStorageProvider();
+    const managerB = new SpaceManager(storageB, remoteStorage);
+    const loadedB = await managerB.loadSpace(spaceA.space_id, 'usr_bob');
+
+    expect(loadedB.manifest.space_name).toBe('Initial Team Space');
+
+    // Alice updates space name and settings
+    await managerA.updateSpaceManifest(
+      spaceA.space_id,
+      {
+        space_name: 'Advanced Science Lab',
+        description: 'Updated space description',
+        settings: {
+          calendar: {
+            enabled: true,
+            mode: 'dedicated',
+            sync_due_dates: true,
+          },
+          invitations: {
+            default_role: 'editor',
+          },
+        },
+      },
+      'usr_alice'
+    );
+
+    // Alice's SyncCoordinator pushes to remote
+    await loadedA.syncCoordinator.triggerSync();
+
+    // Verify remote operation log contains space.manifest.update
+    const remoteOpLog = new OperationLog(spaceA.space_id, remoteStorage);
+    await remoteOpLog.loadAll();
+    const remoteOps = remoteOpLog.getOperations();
+    const manifestOp = remoteOps.find((op) => op.type === 'space.manifest.update');
+    expect(manifestOp).toBeDefined();
+    expect(manifestOp?.actor).toBe('usr_alice');
+
+    // Bob pulls delta ops via his SyncCoordinator
+    await loadedB.syncCoordinator.triggerSync();
+
+    // Bob now has the updated manifest and settings!
+    expect(loadedB.manifest.space_name).toBe('Advanced Science Lab');
+    expect(loadedB.manifest.description).toBe('Updated space description');
+    expect(loadedB.manifest.settings?.calendar?.enabled).toBe(true);
+    expect(loadedB.manifest.settings?.calendar?.mode).toBe('dedicated');
+    expect(loadedB.manifest.settings?.invitations?.default_role).toBe('editor');
+  });
+
+  it('pushes and pulls only granularly modified files based on delta operations', async () => {
+    const remoteStorage = new MemoryStorageProvider();
+
+    const storageA = new MemoryStorageProvider();
+    const managerA = new SpaceManager(storageA, remoteStorage);
+    const spaceA = await managerA.createSpace({
+      spaceName: 'Delta Sync Space',
+      createdByUserId: 'usr_alice',
+    });
+    const loadedA = await managerA.loadSpace(spaceA.space_id, 'usr_alice');
+
+    const storageB = new MemoryStorageProvider();
+    const managerB = new SpaceManager(storageB, remoteStorage);
+    const loadedB = await managerB.loadSpace(spaceA.space_id, 'usr_bob');
+
+    // Spy on remoteStorage.writeFile during Alice's push
+    const remoteWriteSpy = vi.spyOn(remoteStorage, 'writeFile');
+
+    // Alice updates ONLY space manifest
+    await managerA.updateSpaceManifest(
+      spaceA.space_id,
+      { space_name: 'Manifest Only Update' },
+      'usr_alice'
+    );
+    await loadedA.syncCoordinator.triggerSync();
+
+    // Check what was written to remoteStorage: manifest.json and operations batch/index!
+    const writtenPaths = remoteWriteSpy.mock.calls.map((call) => call[0]);
+    expect(writtenPaths).toContain(`LAD/${spaceA.space_id}/manifest.json`);
+    expect(writtenPaths.some((p) => (p as string).includes('/operations/'))).toBe(true);
+    // Should NOT have written graph or objects
+    expect(writtenPaths.some((p) => (p as string).includes('/graph/'))).toBe(false);
+    expect(writtenPaths.some((p) => (p as string).includes('/objects/'))).toBe(false);
+
+    remoteWriteSpy.mockClear();
+
+    // Spy on remoteStorage.readFile during Bob's pull
+    const remoteReadSpy = vi.spyOn(remoteStorage, 'readFile');
+    await loadedB.syncCoordinator.triggerSync();
+
+    const readPaths = remoteReadSpy.mock.calls.map((call) => call[0]);
+    // Bob should have read operations batch/index and manifest.json ONLY
+    expect(readPaths.some((p) => (p as string).includes('/operations/'))).toBe(true);
+    expect(readPaths).toContain(`LAD/${spaceA.space_id}/manifest.json`);
+    expect(readPaths.some((p) => (p as string).includes('/graph/'))).toBe(false);
+    expect(readPaths.some((p) => (p as string).includes('/objects/'))).toBe(false);
+
+    expect(loadedB.manifest.space_name).toBe('Manifest Only Update');
+
+    // Next sync with no remote or local changes should download ZERO entity files (manifest, graph, objects)
+    remoteReadSpy.mockClear();
+    await loadedB.syncCoordinator.triggerSync();
+    const emptySyncReadPaths = remoteReadSpy.mock.calls.map((call) => call[0]);
+    expect(emptySyncReadPaths.some((p) => (p as string).includes('manifest.json'))).toBe(false);
+    expect(emptySyncReadPaths.some((p) => (p as string).includes('/graph/'))).toBe(false);
+    expect(emptySyncReadPaths.some((p) => (p as string).includes('/objects/'))).toBe(false);
   });
 });

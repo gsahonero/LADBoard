@@ -151,7 +151,7 @@ export class SyncCoordinator {
             }
           }
 
-          // Push corresponding object or graph files to remote storage
+          // Push corresponding object, manifest, or graph files to remote storage
           try {
             if (localOp.type.startsWith('object.')) {
               if (localOp.type === 'object.delete') {
@@ -168,11 +168,24 @@ export class SyncCoordinator {
                   await this.remoteStorage.writeFile(`LAD/${this.spaceId}/objects/${localOp.target}.json`, obj);
                 }
               }
+            } else if (localOp.type === 'space.manifest.update') {
+              const manifest = await this.localStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
+              if (manifest) {
+                await this.remoteStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, manifest);
+              }
+            } else if (localOp.type.startsWith('graph.node.')) {
+              const nodes = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (nodes) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, nodes);
+            } else if (localOp.type.startsWith('graph.edge.')) {
+              const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (edges) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, edges);
             } else if (localOp.type.startsWith('graph.') || localOp.type.startsWith('membership.')) {
               const nodes = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
               if (nodes) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, nodes);
               const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
               if (edges) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, edges);
+              const manifest = await this.localStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
+              if (manifest) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, manifest);
             }
           } catch (fileErr) {
             console.warn(`[LAD:SyncCoordinator] Warning syncing file for op ${localOp.operation_id}:`, fileErr);
@@ -214,6 +227,23 @@ export class SyncCoordinator {
                   }
                 }
               }
+            } else if (newOp.type === 'space.manifest.update') {
+              const remoteManifest = await this.remoteStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
+              if (remoteManifest) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, remoteManifest);
+              }
+            } else if (newOp.type.startsWith('graph.node.')) {
+              const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
+              if (remoteNodes) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
+                if (this.graphStore) await this.graphStore.load();
+              }
+            } else if (newOp.type.startsWith('graph.edge.')) {
+              const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (remoteEdges) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
+                if (this.graphStore) await this.graphStore.load();
+              }
             } else if (newOp.type.startsWith('graph.') || newOp.type.startsWith('membership.')) {
               const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
               if (remoteNodes) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
@@ -222,6 +252,8 @@ export class SyncCoordinator {
               if (this.graphStore) {
                 await this.graphStore.load();
               }
+              const remoteManifest = await this.remoteStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
+              if (remoteManifest) await this.localStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, remoteManifest);
             }
           } catch (applyErr) {
             console.warn(`[LAD:SyncCoordinator] Warning applying remote op ${newOp.operation_id}:`, applyErr);
