@@ -548,24 +548,22 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           role: 'editor',
         });
 
-        // Add to user registry if not already present
+        // Add / update user registry space with role editor
         const existingRef = userRegistry.spaces.find((s) => s.space_id === spaceId);
-        if (!existingRef) {
-          const isGoogle = auth.isAuthenticated && auth.user?.provider === 'google';
-          await userRegistryManager.addSpace({
-            space_id: spaceId,
-            space_name: loaded.manifest.space_name,
-            icon: loaded.manifest.icon,
-            color: loaded.manifest.color,
-            description: loaded.manifest.description,
-            categories: loaded.manifest.categories,
-            storage_provider: isGoogle ? 'google_drive' : 'local_indexeddb',
-            storage_reference: spaceId,
-            role: 'editor',
-            status: 'active',
-            last_synced_at: new Date().toISOString(),
-          });
-        }
+        const isGoogle = auth.isAuthenticated && auth.user?.provider === 'google';
+        await userRegistryManager.addSpace({
+          space_id: spaceId,
+          space_name: loaded.manifest.space_name,
+          icon: loaded.manifest.icon,
+          color: loaded.manifest.color,
+          description: loaded.manifest.description,
+          categories: loaded.manifest.categories,
+          storage_provider: isGoogle ? 'google_drive' : existingRef?.storage_provider || 'local_indexeddb',
+          storage_reference: spaceId,
+          role: 'editor',
+          status: 'active',
+          last_synced_at: new Date().toISOString(),
+        });
 
         // Update user registry identity display name if still default and Google profile name is available
         if (auth.user?.name && userRegistry.identities[0]?.display_name === 'LAD User') {
@@ -813,10 +811,13 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const reg = userRegistryManager.getRegistry()!;
       setUserRegistry({ ...reg });
       if (activeSpace) {
+        const spaceRef = reg.spaces.find((s) => s.space_id === activeSpace.manifest.space_id);
+        const isOwner = activeSpace.manifest.created_by === reg.user_id || spaceRef?.role === 'owner';
+        const userRole = spaceRef?.role || (isOwner ? 'owner' : 'editor');
         await activeSpace.graphStore.ensureNodeForEntity(reg.user_id, 'user', displayName, {
           name: displayName,
           email: email || reg.identities[0]?.email,
-          role: 'owner',
+          role: userRole,
         });
         refreshSpaceState();
       }
@@ -851,18 +852,26 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
           if (userRegistryManager) {
             userRegistryManager.setRemoteStorage(storageManager.getRemoteProvider());
-            await userRegistryManager.syncWithRemote();
+            const synced = await userRegistryManager.syncWithRemote();
+            if (synced) {
+              setUserRegistry({ ...synced });
+            }
           }
           if (activeSpace) {
             const currentOwnerId = userRegistry?.user_id || 'usr_owner';
+            const spaceRef = userRegistry?.spaces.find((s) => s.space_id === activeSpace.manifest.space_id);
+            const isOwner = activeSpace.manifest.created_by === currentOwnerId || spaceRef?.role === 'owner';
+            const userRole = spaceRef?.role || (isOwner ? 'owner' : 'editor');
+            const resolvedName = user.name || (isOwner ? 'Owner' : 'Collaborator');
+
             await activeSpace.graphStore.ensureNodeForEntity(
               currentOwnerId,
               'user',
-              user.name || 'Owner',
+              resolvedName,
               {
-                name: user.name || 'Owner',
+                name: resolvedName,
                 email: user.email,
-                role: 'owner',
+                role: userRole,
                 status: 'active',
               }
             );
@@ -912,8 +921,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       opsUploaded: number;
       error?: string;
     }> => {
-      const targetSpaceId = spaceId || activeSpace?.manifest.space_id;
-      if (!spaceManager || !targetSpaceId || !userRegistry) {
+      if (!spaceManager || !userRegistry) {
         return {
           success: false,
           manifestUploaded: false,
@@ -925,15 +933,68 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
       }
 
-      console.log(`[LAD:Context] Initiating repair & upload for space "${targetSpaceId}"...`);
+      console.log(`[LAD:Context] Initiating repair & upload (target: ${spaceId || 'ALL spaces'})...`);
 
+      // 1. Synchronize user.json with Google Drive first, preserving all spaces including editor spaces
       if (userRegistryManager) {
-        await userRegistryManager.syncWithRemote();
+        const synced = await userRegistryManager.syncWithRemote();
+        if (synced) {
+          setUserRegistry({ ...synced });
+        }
       }
 
-      const res = await spaceManager.repairAndUploadSpaceToRemote(targetSpaceId, userRegistry.user_id);
+      const currentRegistry = userRegistryManager?.getRegistry() || userRegistry;
+
+      // 2. If a specific spaceId was requested, repair that space
+      if (spaceId) {
+        const res = await spaceManager.repairAndUploadSpaceToRemote(spaceId, currentRegistry.user_id);
+        refreshSpaceState();
+        return res;
+      }
+
+      // 3. Global repair: repair all spaces in registry
+      console.log(`[LAD:Context] Global repair: processing ${currentRegistry.spaces.length} spaces...`);
+      let totalNodes = 0;
+      let totalEdges = 0;
+      let totalObjects = 0;
+      let totalOps = 0;
+      let anySuccess = false;
+      let lastError: string | undefined;
+
+      const spacesToRepair = currentRegistry.spaces.length > 0
+        ? currentRegistry.spaces
+        : activeSpace ? [{ space_id: activeSpace.manifest.space_id, space_name: activeSpace.manifest.space_name, role: 'owner' as const }] : [];
+
+      for (const sp of spacesToRepair) {
+        try {
+          console.log(`[LAD:Context] Repairing space "${sp.space_name}" (${sp.space_id}) [role: ${sp.role}]...`);
+          const res = await spaceManager.repairAndUploadSpaceToRemote(sp.space_id, currentRegistry.user_id);
+          if (res.success) {
+            anySuccess = true;
+            totalNodes += res.nodesUploaded;
+            totalEdges += res.edgesUploaded;
+            totalObjects += res.objectsUploaded;
+            totalOps += res.opsUploaded;
+          } else if (res.error) {
+            console.warn(`[LAD:Context] Warning repairing space ${sp.space_id}:`, res.error);
+            lastError = res.error;
+          }
+        } catch (e: any) {
+          console.warn(`[LAD:Context] Exception repairing space ${sp.space_id}:`, e);
+          lastError = e?.message;
+        }
+      }
+
       refreshSpaceState();
-      return res;
+      return {
+        success: anySuccess || spacesToRepair.length === 0,
+        manifestUploaded: anySuccess,
+        nodesUploaded: totalNodes,
+        edgesUploaded: totalEdges,
+        objectsUploaded: totalObjects,
+        opsUploaded: totalOps,
+        error: anySuccess ? undefined : lastError,
+      };
     },
     [spaceManager, activeSpace, userRegistry, userRegistryManager, refreshSpaceState]
   );

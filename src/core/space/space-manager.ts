@@ -239,12 +239,19 @@ export class SpaceManager {
       },
     });
 
-    // Ensure current user is present as a node in the graph with real display name
-    const resolvedName = currentUserName || 'Owner';
+    // Ensure current user is present as a node in the graph with real display name & correct role
+    const existingUserNode = graphStore.getNodes().find(
+      (n) => n.ref_id === currentUserId || n.node_id === `node_${currentUserId}`
+    );
+    const isOwner = manifest.created_by === currentUserId;
+    const resolvedRole = (existingUserNode?.metadata?.role as any) || (isOwner ? 'owner' : 'editor');
+    const resolvedName = currentUserName || existingUserNode?.label || (isOwner ? 'Owner' : 'Collaborator');
+
     await graphStore.ensureNodeForEntity(currentUserId, 'user', resolvedName, {
       name: resolvedName,
-      email: currentUserEmail,
-      role: 'owner',
+      email: currentUserEmail || existingUserNode?.metadata?.email,
+      role: resolvedRole,
+      status: 'active',
     });
 
     const loaded: LoadedSpace = {

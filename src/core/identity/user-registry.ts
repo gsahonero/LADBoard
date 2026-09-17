@@ -43,20 +43,49 @@ export class UserRegistryManager {
     console.log('[LAD:UserRegistry] Synchronizing user.json with remote storage...');
 
     try {
+      if (!this.registry) {
+        this.registry = await this.localStorage.readFile<LADUserRegistry>(this.registryPath);
+      }
+
       const remoteReg = await this.remoteStorage.readFile<LADUserRegistry>(this.registryPath);
       if (remoteReg) {
         validateUserRegistry(remoteReg);
         console.log('[LAD:UserRegistry] Found remote user.json with', remoteReg.spaces.length, 'spaces');
 
         if (this.registry) {
-          // Merge spaces
+          // Merge spaces: strictly additive, never remove spaces where user is editor or owner
           const spaceMap = new Map<string, LADUserSpaceRef>();
-          for (const s of remoteReg.spaces) spaceMap.set(s.space_id, s);
+
+          // 1. Seed with remote spaces
+          for (const s of remoteReg.spaces) {
+            spaceMap.set(s.space_id, { ...s });
+          }
+
+          // 2. Merge local spaces into spaceMap
           for (const s of this.registry.spaces) {
-            if (!spaceMap.has(s.space_id)) {
-              spaceMap.set(s.space_id, s);
+            const existing = spaceMap.get(s.space_id);
+            if (!existing) {
+              // Local space (e.g. joined as editor) not yet in remote user.json: preserve it!
+              spaceMap.set(s.space_id, { ...s });
+            } else {
+              // Space exists in both. Preserve the most permissive/active role.
+              const resolvedRole =
+                existing.role === 'owner' || s.role === 'owner'
+                  ? 'owner'
+                  : existing.role === 'editor' || s.role === 'editor'
+                  ? 'editor'
+                  : 'viewer';
+
+              spaceMap.set(s.space_id, {
+                ...existing,
+                ...s,
+                role: resolvedRole,
+                status: existing.status === 'active' || s.status === 'active' ? 'active' : s.status,
+                last_synced_at: new Date().toISOString(),
+              });
             }
           }
+
           this.registry.spaces = Array.from(spaceMap.values());
           await this.saveRegistry(this.registry);
         } else {

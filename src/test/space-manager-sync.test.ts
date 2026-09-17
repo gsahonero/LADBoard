@@ -3,6 +3,7 @@ import { SpaceManager } from '../core/space/space-manager';
 import { MemoryStorageProvider } from '../core/storage/memory-provider';
 import { ConflictResolver } from '../core/sync/conflict-resolver';
 import { LADOperation } from '../core/standard/types';
+import { UserRegistryManager } from '../core/identity/user-registry';
 
 describe('Space Manager, Offline Queue & Conflict Resolver', () => {
   it('creates and loads a new Space with standard layout', async () => {
@@ -205,5 +206,88 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     expect(loadedB.manifest.space_name).toBe('Shared Project');
     expect(loadedB.objectStore.getAll().length).toBe(1);
     expect(loadedB.objectStore.getAll()[0].title).toBe('Project Roadmap');
+  });
+
+  it('preserves spaces where user is editor during user registry sync with remote', async () => {
+    const userLocal = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+
+    // 1. Initial registry on remote has only user's personal space
+    const remoteRegManager = new UserRegistryManager(remoteStorage);
+    const remoteReg = await remoteRegManager.loadOrCreateRegistry('user@example.com', 'google');
+    expect(remoteReg.spaces.length).toBe(1);
+    expect(remoteReg.spaces[0].role).toBe('owner');
+
+    // 2. Local user registry has the personal space AND an editor space (joined via invite)
+    const localRegManager = new UserRegistryManager(userLocal, remoteStorage);
+    await localRegManager.loadOrCreateRegistry('user@example.com', 'google');
+    await localRegManager.addSpace({
+      space_id: 'spc_collab_99',
+      space_name: 'Collaborative Space',
+      storage_provider: 'google_drive',
+      storage_reference: 'spc_collab_99',
+      role: 'editor',
+      status: 'active',
+    });
+
+    const localBeforeSync = localRegManager.getRegistry();
+    expect(localBeforeSync?.spaces.some((s) => s.space_id === 'spc_collab_99' && s.role === 'editor')).toBe(true);
+
+    // 3. Sync with remote: remote user.json had fewer spaces, but editor space must NOT be removed!
+    const synced = await localRegManager.syncWithRemote();
+    expect(synced).not.toBeNull();
+    const collabSpace = synced?.spaces.find((s) => s.space_id === 'spc_collab_99');
+    expect(collabSpace).toBeDefined();
+    expect(collabSpace?.role).toBe('editor');
+    expect(collabSpace?.status).toBe('active');
+
+    // Remote user.json must also now contain the editor space
+    const remoteSaved = await remoteStorage.readFile<any>('LAD/USER/user.json');
+    expect(remoteSaved.spaces.some((s: any) => s.space_id === 'spc_collab_99' && s.role === 'editor')).toBe(true);
+  });
+
+  it('preserves editor role, creator ID, and space reference when an editor executes repairAndUploadSpaceToRemote', async () => {
+    const remoteStorage = new MemoryStorageProvider();
+
+    // Space created by Alice (owner)
+    const aliceLocal = new MemoryStorageProvider();
+    const aliceManager = new SpaceManager(aliceLocal, remoteStorage);
+    const space = await aliceManager.createSpace({
+      spaceName: 'Design Systems',
+      createdByUserId: 'usr_alice_owner',
+    });
+    await aliceManager.repairAndUploadSpaceToRemote(space.space_id, 'usr_alice_owner');
+
+    // Bob (editor) loads the space locally
+    const bobLocal = new MemoryStorageProvider();
+    const bobManager = new SpaceManager(bobLocal, remoteStorage);
+    const loadedBob = await bobManager.loadSpace(space.space_id, 'usr_bob_editor', 5000, 'Design Systems', 'Bob Editor', 'bob@test.com');
+
+    // Verify Bob's role in the graph is editor, not owner
+    const bobNode = loadedBob.graphStore.getNodes().find((n) => n.ref_id === 'usr_bob_editor');
+    expect(bobNode).toBeDefined();
+    expect(bobNode?.metadata?.role).toBe('editor');
+
+    // Bob adds an object
+    const colorObj = loadedBob.objectStore.createObject({
+      title: 'Color Palette',
+      domain: 'design',
+      actorUserId: 'usr_bob_editor',
+    });
+    await loadedBob.objectStore.save(colorObj);
+
+    // Bob runs repairAndUploadSpaceToRemote
+    const repairRes = await bobManager.repairAndUploadSpaceToRemote(space.space_id, 'usr_bob_editor');
+    expect(repairRes.success).toBe(true);
+
+    // Verify manifest created_by is still Alice
+    const remoteManifest = await remoteStorage.readFile<any>(`LAD/${space.space_id}/manifest.json`);
+    expect(remoteManifest.created_by).toBe('usr_alice_owner');
+
+    // Verify Bob's node on remote graph is still editor
+    const remoteNodes = await remoteStorage.readFile<any[]>(`LAD/${space.space_id}/graph/nodes.json`);
+    expect(remoteNodes).toBeDefined();
+    const remoteBobNode = remoteNodes?.find((n: any) => n.ref_id === 'usr_bob_editor');
+    expect(remoteBobNode?.metadata?.role).toBe('editor');
   });
 });
