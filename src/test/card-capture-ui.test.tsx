@@ -4,6 +4,8 @@ import { SmartCaptureBar } from '../ui/components/SmartCaptureBar';
 import { ObjectCard } from '../ui/components/ObjectCard';
 import { OnItsWayModal } from '../ui/components/OnItsWayModal';
 import { LivingBoardView } from '../ui/views/LivingBoardView';
+import { CardTypeEditorModal } from '../ui/components/CardTypeEditorModal';
+import { SchemaRegistry } from '../core/schemas/schema-registry';
 import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADContext } from '../ui/context/LADContext';
 import { LADObject } from '../core/standard/types';
@@ -263,5 +265,70 @@ describe('Card & Capture UI Automated Test Suite', () => {
         true
       );
     });
+  });
+
+  it('allows creating and modifying custom card types via CardTypeEditorModal', async () => {
+    const updateSpaceIdentity = vi.fn().mockResolvedValue(true);
+    const onSaved = vi.fn();
+    const onClose = vi.fn();
+
+    const mockContext: any = {
+      activeManifest: {
+        space_id: 'space_test_1',
+        space_name: 'Test Space',
+        settings: {},
+      },
+      updateSpaceIdentity,
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext}>
+          <CardTypeEditorModal
+            isOpen={true}
+            onClose={onClose}
+            defaultCategory="health"
+            onSaved={onSaved}
+          />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    expect(screen.getByText('Create New Card Type')).toBeInTheDocument();
+
+    // Fill in Card Type Name
+    const nameInput = screen.getByTestId('card-type-name-input');
+    fireEvent.change(nameInput, { target: { value: 'Pet Vaccination' } });
+
+    // Add another field
+    const addFieldBtn = screen.getByTestId('add-field-button');
+    fireEvent.click(addFieldBtn);
+
+    // Save Card Type
+    const saveBtn = screen.getByTestId('save-card-type-button');
+    fireEvent.click(saveBtn);
+
+    let savedDefinition: any;
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalled();
+      savedDefinition = onSaved.mock.calls[0][0];
+      expect(savedDefinition.name).toBe('Pet Vaccination');
+      expect(savedDefinition.category).toBe('health');
+      expect(savedDefinition.fields.length).toBe(3); // 2 default fields + 1 added
+      expect(updateSpaceIdentity).toHaveBeenCalledWith(
+        'space_test_1',
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            custom_card_types: expect.any(Array),
+          }),
+        })
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    // Check that SchemaRegistry now contains the new card type
+    const registered = SchemaRegistry.getInstance().getCardType(savedDefinition.id);
+    expect(registered).toBeDefined();
+    expect(registered?.name).toBe('Pet Vaccination');
   });
 });

@@ -27,8 +27,11 @@ import {
   LogOut,
   AlertTriangle,
   Archive,
+  Pencil,
 } from 'lucide-react';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
+import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { CardTypeEditorModal } from '../components/CardTypeEditorModal';
 
 
 interface SpaceSettingsViewProps {
@@ -69,6 +72,10 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(
     activeManifest?.settings?.auto_archive_days ?? 7
   );
+
+  // Card Type Schema Editor State
+  const [editingCardType, setEditingCardType] = useState<LADCardTypeDefinition | null | undefined>(null);
+  const [isCardTypeEditorOpen, setIsCardTypeEditorOpen] = useState(false);
 
   // Calendar Integration State
   const [calendarEnabled, setCalendarEnabled] = useState(
@@ -632,45 +639,78 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
 
         {/* Card Types Grid */}
         <div className="space-y-2.5">
-          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
-            Active Card Types in this Space
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
+              Active Card Types in this Space
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingCardType(null);
+                setIsCardTypeEditorOpen(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+              data-testid="create-card-type-btn"
+            >
+              <Plus className="w-3 h-3" />
+              Create Card Type
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SchemaRegistry.getInstance()
               .getAllCardTypes()
               .map((ct) => (
                 <div
                   key={ct.id}
-                  className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-2"
+                  className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-2 flex flex-col justify-between"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      {ct.name}
-                    </span>
-                    <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                        ct.isDefault
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                          : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 border border-indigo-200'
-                      }`}
-                    >
-                      {ct.isDefault ? 'Default' : 'Custom'}
-                    </span>
-                  </div>
-                  {ct.description && (
-                    <p className="text-[11px] text-slate-500 line-clamp-1">
-                      {ct.description}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {ct.fields.map((f) => (
-                      <span
-                        key={f.key}
-                        className="text-[10px] px-1.5 py-0.5 bg-slate-50 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
-                      >
-                        {f.label} ({f.type})
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        {ct.name}
                       </span>
-                    ))}
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          ct.isDefault
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                            : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 border border-indigo-200'
+                        }`}
+                      >
+                        {ct.isDefault ? 'Default' : 'Custom'}
+                      </span>
+                    </div>
+                    {ct.description && (
+                      <p className="text-[11px] text-slate-500 line-clamp-1">
+                        {ct.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {ct.fields.map((f) => (
+                        <span
+                          key={f.key}
+                          className="text-[10px] px-1.5 py-0.5 bg-slate-50 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                        >
+                          {f.label} ({f.type})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {ct.category}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCardType(ct);
+                        setIsCardTypeEditorOpen(true);
+                      }}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      data-testid={`edit-card-type-${ct.id}`}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      {ct.isDefault ? 'Customize Copy' : 'Edit Schema'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1163,6 +1203,16 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           </div>
         </div>
       )}
+
+      {/* Card Type Schema Editor Modal */}
+      <CardTypeEditorModal
+        isOpen={isCardTypeEditorOpen}
+        onClose={() => {
+          setIsCardTypeEditorOpen(false);
+          setEditingCardType(null);
+        }}
+        cardType={editingCardType}
+      />
     </div>
   );
 };

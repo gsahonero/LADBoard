@@ -5,7 +5,8 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { ObjectCard } from '../components/ObjectCard';
 import { ModernIcon } from '../components/ModernIcon';
 import { fuzzyFilterObjects } from '../../core/utils/fuzzy-search';
-import { Search, ArrowLeft, Plus } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Layers } from 'lucide-react';
+import { CardTypeEditorModal } from '../components/CardTypeEditorModal';
 
 import { getCategoryMeta } from '../../core/theme/space-identity';
 
@@ -48,6 +49,7 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('all');
+  const [isCardTypeEditorOpen, setIsCardTypeEditorOpen] = useState(false);
 
   const meta = getCategoryMeta(topicId);
   const topicTitle = meta.labelKey ? t(meta.labelKey) : (meta.label || topicId);
@@ -125,16 +127,29 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
             </div>
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => onOpenCapture(topicId)}
-            style={{ backgroundColor: 'var(--color-primary)' }}
-            className="px-5 py-2.5 text-white font-semibold text-sm rounded-xl shadow-md transition-all self-start sm:self-auto cursor-pointer flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t('boardView.addItem')}</span>
-          </motion.button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsCardTypeEditorOpen(true)}
+              className="px-3.5 py-2.5 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-semibold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              data-testid="category-card-types-btn"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Card Schemas</span>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => onOpenCapture(topicId)}
+              style={{ backgroundColor: 'var(--color-primary)' }}
+              className="px-5 py-2.5 text-white font-semibold text-sm rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t('boardView.addItem')}</span>
+            </motion.button>
+          </div>
         </div>
       </motion.div>
 
@@ -235,6 +250,11 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+      <CardTypeEditorModal
+        isOpen={isCardTypeEditorOpen}
+        onClose={() => setIsCardTypeEditorOpen(false)}
+        defaultCategory={topicId}
+      />
     </motion.div>
   );
 };
