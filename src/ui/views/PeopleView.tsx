@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
-import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const PeopleView: React.FC = () => {
@@ -16,6 +16,7 @@ export const PeopleView: React.FC = () => {
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'owner' | 'editor' | 'viewer'>('editor');
+  const [isSending, setIsSending] = useState(false);
   const [reinvitingId, setReinvitingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [warningMsg, setWarningMsg] = useState('');
@@ -23,16 +24,23 @@ export const PeopleView: React.FC = () => {
   const userNodes = nodes.filter((n) => n.type === 'user');
 
   const handleSendInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    const res = await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
-    setInviteName('');
-    setInviteEmail('');
-    if (res.gmailSent) {
-      setSuccessMsg(t('peopleView.invitationSent'));
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } else {
-      setWarningMsg(res.warning || t('peopleView.invitationCreatedNoEmail'));
-      setTimeout(() => setWarningMsg(''), 7000);
+    if (!inviteEmail.trim() || isSending) return;
+    setIsSending(true);
+    try {
+      const res = await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
+      setInviteName('');
+      setInviteEmail('');
+      if (res.gmailSent) {
+        setSuccessMsg(t('peopleView.invitationSent'));
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setWarningMsg(res.warning || t('peopleView.invitationCreatedNoEmail'));
+        setTimeout(() => setWarningMsg(''), 7000);
+      }
+    } catch (err: any) {
+      setWarningMsg(err.message || 'Failed to send invitation');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -145,11 +153,20 @@ export const PeopleView: React.FC = () => {
               </select>
               <button
                 onClick={handleSendInvite}
-                disabled={!inviteEmail.trim()}
-                className="px-4 py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer shrink-0"
+                disabled={!inviteEmail.trim() || isSending}
+                className="px-4 py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer shrink-0 disabled:cursor-not-allowed"
               >
-                <UserPlus className="w-4 h-4" />
-                <span>{t('spaces.sendInvite')}</span>
+                {isSending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{t('spaces.sending') || 'Sending...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    <span>{t('spaces.sendInvite')}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -20,6 +20,9 @@ import {
   Radio,
   Clock,
   Layers,
+  Cloud,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SpaceSettingsViewProps {
@@ -29,7 +32,7 @@ interface SpaceSettingsViewProps {
 export { getShareableJoinUrl };
 
 export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchToGlobal }) => {
-  const { activeManifest, updateSpaceIdentity, objects, authService } = useLAD();
+  const { activeManifest, updateSpaceIdentity, objects, authService, repairSpaceDriveFiles } = useLAD();
   const { t } = useI18n();
 
   // Space Identity State
@@ -66,8 +69,37 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
   } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isRepairingDrive, setIsRepairingDrive] = useState(false);
+  const [repairResultMsg, setRepairResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleRepairDrive = async () => {
+    if (!activeManifest?.space_id) return;
+    setIsRepairingDrive(true);
+    setRepairResultMsg(null);
+    try {
+      const res = await repairSpaceDriveFiles(activeManifest.space_id);
+      if (res.success) {
+        setRepairResultMsg({
+          type: 'success',
+          text: `Google Drive space files repaired: manifest uploaded, ${res.objectsUploaded} objects, ${res.nodesUploaded} graph nodes, and ${res.opsUploaded} operations.`,
+        });
+      } else {
+        setRepairResultMsg({
+          type: 'error',
+          text: res.error || 'Failed to repair space files in Google Drive.',
+        });
+      }
+    } catch (err: any) {
+      setRepairResultMsg({
+        type: 'error',
+        text: err.message || 'Error occurred while repairing files.',
+      });
+    } finally {
+      setIsRepairingDrive(false);
+    }
+  };
 
   // Sync state from manifest if it updates externally
   useEffect(() => {
@@ -708,6 +740,55 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
             </div>
           </div>
         </div>
+
+        {auth.isAuthenticated && (
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Cloud className="w-3.5 h-3.5 text-blue-500" />
+                <span>Upload & Repair Google Drive Files</span>
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Pushes this space's manifest, graph nodes, and all {objects.length} objects into Google Drive.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRepairDrive}
+              disabled={isRepairingDrive}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/80 rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            >
+              {isRepairingDrive ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                  <span>Repairing files...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Fix GDrive Files</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {repairResultMsg && (
+          <div
+            className={`mt-2 p-3 rounded-xl text-xs flex items-center gap-2 border font-medium ${
+              repairResultMsg.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+            }`}
+          >
+            {repairResultMsg.type === 'success' ? (
+              <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            )}
+            <span>{repairResultMsg.text}</span>
+          </div>
+        )}
       </div>
 
       {/* Save Button Bar */}

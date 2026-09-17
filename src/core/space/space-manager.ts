@@ -117,14 +117,17 @@ export class SpaceManager {
       return loaded;
     }
 
-    // Try reading manifest from local storage first
+    let isReplicatingFromRemote = false;
     let manifest = await this.localStorage.readFile<LADSpaceManifest>(this.getManifestPath(spaceId));
 
     if (!manifest && this.remoteStorage) {
+      console.log(`[LAD:SpaceManager] Local manifest missing for ${spaceId}. Reading from remote storage...`);
       manifest = await this.remoteStorage.readFile<LADSpaceManifest>(this.getManifestPath(spaceId));
       if (manifest) {
         // Cache to local storage
         await this.localStorage.writeFile(this.getManifestPath(spaceId), manifest);
+        isReplicatingFromRemote = true;
+        console.log(`[LAD:SpaceManager] ✅ Cached remote manifest to local storage`);
       }
     }
 
@@ -162,6 +165,39 @@ export class SpaceManager {
 
     const objectStore = new ObjectStore(spaceId, this.localStorage);
     await objectStore.loadAll();
+
+    // If replicating from remote or local stores are completely empty while remote is connected:
+    if (this.remoteStorage && (isReplicatingFromRemote || (objectStore.getAll().length === 0 && graphStore.getNodes().length === 0))) {
+      try {
+        console.log(`[LAD:SpaceManager] Replicating remote space data for ${spaceId}...`);
+        // Replicate graph
+        const remoteNodes = await this.remoteStorage.readFile<any[]>(`LAD/${spaceId}/graph/nodes.json`);
+        if (remoteNodes && Array.isArray(remoteNodes)) {
+          await this.localStorage.writeFile(`LAD/${spaceId}/graph/nodes.json`, remoteNodes);
+          await graphStore.load();
+        }
+        const remoteEdges = await this.remoteStorage.readFile<any[]>(`LAD/${spaceId}/graph/edges.json`);
+        if (remoteEdges && Array.isArray(remoteEdges)) {
+          await this.localStorage.writeFile(`LAD/${spaceId}/graph/edges.json`, remoteEdges);
+          await graphStore.load();
+        }
+
+        // Replicate objects
+        const remoteObjectFiles = await this.remoteStorage.listFiles(`LAD/${spaceId}/objects`);
+        for (const file of remoteObjectFiles) {
+          if (file.name.endsWith('.json')) {
+            const obj = await this.remoteStorage.readFile<any>(file.path);
+            if (obj) {
+              await this.localStorage.writeFile(`LAD/${spaceId}/objects/${file.name}`, obj);
+            }
+          }
+        }
+        await objectStore.loadAll();
+        console.log(`[LAD:SpaceManager] ✅ Replicated ${objectStore.getAll().length} objects and ${graphStore.getNodes().length} nodes from remote`);
+      } catch (err) {
+        console.warn(`[LAD:SpaceManager] Error replicating remote space data:`, err);
+      }
+    }
 
     const operationLog = new OperationLog(spaceId, this.localStorage);
     await operationLog.loadAll();
@@ -351,7 +387,108 @@ export class SpaceManager {
       patch: invitation as any,
     });
 
+    // Synchronize invitation node and manifest to remote storage if connected
+    if (this.remoteStorage) {
+      try {
+        console.log(`[LAD:SpaceManager] Syncing invitation graph & manifest to Google Drive for space ${spaceId}...`);
+        await this.remoteStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/nodes.json`, space.graphStore.getNodes());
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/edges.json`, space.graphStore.getEdges());
+        console.log(`[LAD:SpaceManager] ✅ Synced invitation node to Google Drive`);
+      } catch (err) {
+        console.warn(`[LAD:SpaceManager] Could not sync invitation to remote storage:`, err);
+      }
+    }
+
     return invitation;
+  }
+
+  /**
+   * Uploads and repairs all space data (manifest, graph, objects, operations) on Google Drive
+   */
+  async repairAndUploadSpaceToRemote(
+    spaceId: string,
+    currentUserId: string
+  ): Promise<{
+    success: boolean;
+    manifestUploaded: boolean;
+    nodesUploaded: number;
+    edgesUploaded: number;
+    objectsUploaded: number;
+    opsUploaded: number;
+    error?: string;
+  }> {
+    if (!this.remoteStorage) {
+      return {
+        success: false,
+        manifestUploaded: false,
+        nodesUploaded: 0,
+        edgesUploaded: 0,
+        objectsUploaded: 0,
+        opsUploaded: 0,
+        error: 'Remote storage provider (Google Drive) is not connected',
+      };
+    }
+
+    console.log(`[LAD:SpaceManager] 🚀 Repairing & Uploading Space "${spaceId}" to Google Drive...`);
+
+    try {
+      const space = await this.loadSpace(spaceId, currentUserId);
+
+      // 1. Ensure space folder exists
+      await this.remoteStorage.ensureDirectory(`LAD/${spaceId}`);
+
+      // 2. Upload manifest
+      await this.remoteStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
+      console.log(`[LAD:SpaceManager] ✅ Uploaded manifest.json for ${spaceId}`);
+
+      // 3. Upload graph nodes and edges
+      await this.remoteStorage.ensureDirectory(`LAD/${spaceId}/graph`);
+      const nodes = space.graphStore.getNodes();
+      await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/nodes.json`, nodes);
+      const edges = space.graphStore.getEdges();
+      await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/edges.json`, edges);
+      console.log(`[LAD:SpaceManager] ✅ Uploaded ${nodes.length} nodes and ${edges.length} edges`);
+
+      // 4. Upload all objects
+      await this.remoteStorage.ensureDirectory(`LAD/${spaceId}/objects`);
+      const objects = space.objectStore.getAll();
+      for (const obj of objects) {
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/objects/${obj.object_id}.json`, obj);
+      }
+      console.log(`[LAD:SpaceManager] ✅ Uploaded ${objects.length} objects`);
+
+      // 5. Upload operations
+      await this.remoteStorage.ensureDirectory(`LAD/${spaceId}/operations`);
+      const ops = space.operationLog.getOperations();
+      if (ops.length > 0) {
+        const remoteOpLog = new OperationLog(spaceId, this.remoteStorage);
+        for (const op of ops) {
+          await remoteOpLog.append(op);
+        }
+      }
+      console.log(`[LAD:SpaceManager] ✅ Uploaded ${ops.length} operations`);
+
+      return {
+        success: true,
+        manifestUploaded: true,
+        nodesUploaded: nodes.length,
+        edgesUploaded: edges.length,
+        objectsUploaded: objects.length,
+        opsUploaded: ops.length,
+      };
+    } catch (err: any) {
+      console.error(`[LAD:SpaceManager] ❌ Failed to repair & upload space ${spaceId}:`, err);
+      return {
+        success: false,
+        manifestUploaded: false,
+        nodesUploaded: 0,
+        edgesUploaded: 0,
+        objectsUploaded: 0,
+        opsUploaded: 0,
+        error: err.message || 'Failed to upload space to Google Drive',
+      };
+    }
   }
 
   /**

@@ -57,6 +57,15 @@ export interface LADContextType {
     role?: 'owner' | 'editor' | 'viewer',
     name?: string
   ) => Promise<{ success: boolean; gmailSent: boolean; driveShared: boolean; warning?: string }>;
+  repairSpaceDriveFiles: (spaceId?: string) => Promise<{
+    success: boolean;
+    manifestUploaded: boolean;
+    nodesUploaded: number;
+    edgesUploaded: number;
+    objectsUploaded: number;
+    opsUploaded: number;
+    error?: string;
+  }>;
   
   // Space Joining & Invitations
   pendingJoinSpaceId: string | null;
@@ -146,7 +155,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
 
-      const regManager = new UserRegistryManager(storageManager.getLocalProvider());
+      const regManager = new UserRegistryManager(
+        storageManager.getLocalProvider(),
+        storageManager.getRemoteProvider()
+      );
       const spManager = new SpaceManager(
         storageManager.getLocalProvider(),
         storageManager.getRemoteProvider()
@@ -407,6 +419,19 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         role,
         name
       );
+
+      // Pre-upload complete space snapshot to Google Drive if remote storage is active
+      if (storageManager.getRemoteProvider()) {
+        try {
+          console.log('[LAD:Invitation] Pushing complete space snapshot to Google Drive before sharing...');
+          await spaceManager.repairAndUploadSpaceToRemote(
+            activeSpace.manifest.space_id,
+            userRegistry.user_id
+          );
+        } catch (e: any) {
+          console.warn('[LAD:Invitation] Warning during pre-share space upload:', e);
+        }
+      }
 
       let driveShared = false;
       let gmailSent = false;
@@ -824,6 +849,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             await userRegistryManager.updateIdentity(user.name, user.email);
             setUserRegistry({ ...userRegistryManager.getRegistry()! });
           }
+          if (userRegistryManager) {
+            userRegistryManager.setRemoteStorage(storageManager.getRemoteProvider());
+            await userRegistryManager.syncWithRemote();
+          }
           if (activeSpace) {
             const currentOwnerId = userRegistry?.user_id || 'usr_owner';
             await activeSpace.graphStore.ensureNodeForEntity(
@@ -837,6 +866,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 status: 'active',
               }
             );
+            if (spaceManager) {
+              await spaceManager.repairAndUploadSpaceToRemote(
+                activeSpace.manifest.space_id,
+                currentOwnerId
+              );
+            }
             await activeSpace.syncCoordinator.triggerSync();
           }
           refreshSpaceState();
@@ -863,6 +898,44 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updatePreferences,
       refreshSpaceState,
     ]
+  );
+
+  const repairSpaceDriveFiles = useCallback(
+    async (
+      spaceId?: string
+    ): Promise<{
+      success: boolean;
+      manifestUploaded: boolean;
+      nodesUploaded: number;
+      edgesUploaded: number;
+      objectsUploaded: number;
+      opsUploaded: number;
+      error?: string;
+    }> => {
+      const targetSpaceId = spaceId || activeSpace?.manifest.space_id;
+      if (!spaceManager || !targetSpaceId || !userRegistry) {
+        return {
+          success: false,
+          manifestUploaded: false,
+          nodesUploaded: 0,
+          edgesUploaded: 0,
+          objectsUploaded: 0,
+          opsUploaded: 0,
+          error: 'Space or storage not ready',
+        };
+      }
+
+      console.log(`[LAD:Context] Initiating repair & upload for space "${targetSpaceId}"...`);
+
+      if (userRegistryManager) {
+        await userRegistryManager.syncWithRemote();
+      }
+
+      const res = await spaceManager.repairAndUploadSpaceToRemote(targetSpaceId, userRegistry.user_id);
+      refreshSpaceState();
+      return res;
+    },
+    [spaceManager, activeSpace, userRegistry, userRegistryManager, refreshSpaceState]
   );
 
   const triggerSync = useCallback(async () => {
@@ -901,6 +974,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateSpaceSettings,
         renameSpace,
         inviteMember,
+        repairSpaceDriveFiles,
         pendingJoinSpaceId,
         joinSpace,
         dismissPendingJoinSpace,

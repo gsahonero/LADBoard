@@ -54,6 +54,7 @@ export async function shareSpaceDriveFolder(
   targetEmail: string,
   role: 'editor' | 'viewer' = 'editor'
 ): Promise<DriveShareResult> {
+  console.log(`[LAD:Invitation] 🤝 Sharing Google Drive folder ${folderId} with ${targetEmail} as ${role}...`);
   try {
     const driveRole = role === 'editor' ? 'writer' : 'reader';
     const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
@@ -75,18 +76,22 @@ export async function shareSpaceDriveFolder(
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
+      const errorMsg = errJson.error?.message || `Google Drive permission error: ${res.statusText}`;
+      console.error(`[LAD:Invitation] ❌ Failed to share folder with ${targetEmail}:`, errorMsg);
       return {
         success: false,
-        error: errJson.error?.message || `Google Drive permission error: ${res.statusText}`,
+        error: errorMsg,
       };
     }
 
     const data = await res.json();
+    console.log(`[LAD:Invitation] ✅ Successfully granted Google Drive permission ${data.id} to ${targetEmail}`);
     return {
       success: true,
       permissionId: data.id,
     };
   } catch (err: any) {
+    console.error(`[LAD:Invitation] ❌ Exception in shareSpaceDriveFolder:`, err);
     return {
       success: false,
       error: err.message || 'Failed to share Google Drive folder',
@@ -184,6 +189,8 @@ export async function sendGmailInvitation(
     const rawMessage = emailBodyLines.join('\r\n');
     const encoded = base64UrlEncode(rawMessage);
 
+    console.log(`[LAD:Invitation] 📧 Sending invitation email via Gmail API to ${params.toEmail}...`);
+
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: {
@@ -195,18 +202,22 @@ export async function sendGmailInvitation(
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
+      const errorMsg = errData.error?.message || `Gmail API error: ${res.statusText}`;
+      console.warn(`[LAD:Invitation] ⚠️ Gmail API send failed for ${params.toEmail}:`, errorMsg);
       return {
         success: false,
-        error: errData.error?.message || `Gmail API error: ${res.statusText}`,
+        error: errorMsg,
       };
     }
 
     const data = await res.json();
+    console.log(`[LAD:Invitation] ✅ Gmail invitation successfully sent to ${params.toEmail} (messageId: ${data.id})`);
     return {
       success: true,
       messageId: data.id,
     };
   } catch (err: any) {
+    console.warn(`[LAD:Invitation] ⚠️ Gmail dispatch error:`, err);
     return {
       success: false,
       error: err.message || 'Failed to dispatch Gmail invitation',
@@ -222,18 +233,27 @@ export async function validateSpaceAccessAndInvitation(
   spaceId: string,
   userEmail: string
 ): Promise<SpaceInviteVerificationResult> {
+  console.log(`[LAD:Invitation] 🔍 Validating space access for spaceId: "${spaceId}", userEmail: "${userEmail}" using ${storage.name}...`);
   try {
     // 1. Read space manifest
-    const manifest = await storage.readFile<LADSpaceManifest>(`LAD/${spaceId}/manifest.json`);
+    const manifestPath = `LAD/${spaceId}/manifest.json`;
+    console.log(`[LAD:Invitation] Checking manifest at "${manifestPath}"...`);
+    const manifest = await storage.readFile<LADSpaceManifest>(manifestPath);
     if (!manifest) {
+      console.warn(`[LAD:Invitation] ❌ Space manifest NOT found at "${manifestPath}"`);
       return {
         isValid: false,
         error: 'MANIFEST_NOT_FOUND',
       };
     }
+    console.log(`[LAD:Invitation] ✅ Found manifest for "${manifest.space_name}" (${manifest.space_id})`);
 
     // 2. Read graph nodes to locate user membership or invitation
-    const nodes = (await storage.readFile<LADGraphNode[]>(`LAD/${spaceId}/graph/nodes.json`)) || [];
+    const nodesPath = `LAD/${spaceId}/graph/nodes.json`;
+    console.log(`[LAD:Invitation] Reading graph nodes at "${nodesPath}"...`);
+    const nodes = (await storage.readFile<LADGraphNode[]>(nodesPath)) || [];
+    console.log(`[LAD:Invitation] Found ${nodes.length} graph nodes`);
+
     const normalizedEmail = userEmail.trim().toLowerCase();
 
     // Check for matching node
@@ -251,6 +271,8 @@ export async function validateSpaceAccessAndInvitation(
         .map((n) => n.metadata?.email)
         .filter(Boolean);
 
+      console.warn(`[LAD:Invitation] ❌ Identity mismatch: currentUser="${normalizedEmail}", invited=${JSON.stringify(invitedEmails)}`);
+
       return {
         isValid: false,
         manifest,
@@ -263,6 +285,8 @@ export async function validateSpaceAccessAndInvitation(
     const invitedName = matchingNode?.metadata?.name || matchingNode?.label;
     const inviterNode = nodes.find((n) => n.metadata?.role === 'owner');
 
+    console.log(`[LAD:Invitation] ✅ Space access validated successfully! Role: ${role}, invitedName: ${invitedName}`);
+
     return {
       isValid: true,
       manifest,
@@ -273,6 +297,7 @@ export async function validateSpaceAccessAndInvitation(
       invitationId: matchingNode?.metadata?.invitation_id,
     };
   } catch (err: any) {
+    console.error(`[LAD:Invitation] ❌ Exception during validateSpaceAccessAndInvitation:`, err);
     return {
       isValid: false,
       error: err.message || 'SPACE_UNAVAILABLE',

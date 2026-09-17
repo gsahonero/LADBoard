@@ -15,10 +15,17 @@ import { IStorageProvider } from '../storage/provider.interface';
 export class UserRegistryManager {
   private registryPath = 'LAD/USER/user.json';
   private registry: LADUserRegistry | null = null;
-  private storage: IStorageProvider;
+  private localStorage: IStorageProvider;
+  private remoteStorage: IStorageProvider | null = null;
 
-  constructor(storage: IStorageProvider) {
-    this.storage = storage;
+  constructor(localStorage: IStorageProvider, remoteStorage?: IStorageProvider | null) {
+    this.localStorage = localStorage;
+    this.remoteStorage = remoteStorage || null;
+  }
+
+  setRemoteStorage(remote: IStorageProvider | null) {
+    this.remoteStorage = remote;
+    console.log('[LAD:UserRegistry] Remote storage provider updated:', remote?.name || 'none');
   }
 
   generateUserId(): string {
@@ -31,8 +38,66 @@ export class UserRegistryManager {
     return `spc_${rand}`;
   }
 
+  async syncWithRemote(): Promise<LADUserRegistry | null> {
+    if (!this.remoteStorage) return this.registry;
+    console.log('[LAD:UserRegistry] Synchronizing user.json with remote storage...');
+
+    try {
+      const remoteReg = await this.remoteStorage.readFile<LADUserRegistry>(this.registryPath);
+      if (remoteReg) {
+        validateUserRegistry(remoteReg);
+        console.log('[LAD:UserRegistry] Found remote user.json with', remoteReg.spaces.length, 'spaces');
+
+        if (this.registry) {
+          // Merge spaces
+          const spaceMap = new Map<string, LADUserSpaceRef>();
+          for (const s of remoteReg.spaces) spaceMap.set(s.space_id, s);
+          for (const s of this.registry.spaces) {
+            if (!spaceMap.has(s.space_id)) {
+              spaceMap.set(s.space_id, s);
+            }
+          }
+          this.registry.spaces = Array.from(spaceMap.values());
+          await this.saveRegistry(this.registry);
+        } else {
+          this.registry = remoteReg;
+          await this.localStorage.writeFile(this.registryPath, remoteReg);
+        }
+        return this.registry;
+      } else if (this.registry) {
+        // Remote doesn't have it yet, push local
+        console.log('[LAD:UserRegistry] Remote user.json missing. Uploading local registry to remote...');
+        await this.remoteStorage.writeFile(this.registryPath, this.registry);
+        console.log('[LAD:UserRegistry] ✅ Uploaded user.json to remote storage');
+      }
+    } catch (err) {
+      console.warn('[LAD:UserRegistry] Remote user.json sync encountered an issue:', err);
+    }
+
+    return this.registry;
+  }
+
   async loadOrCreateRegistry(email?: string, provider: 'google' | 'local' = 'local'): Promise<LADUserRegistry> {
-    const existing = await this.storage.readFile<LADUserRegistry>(this.registryPath);
+    console.log('[LAD:UserRegistry] Loading user registry (email:', email, 'provider:', provider, ')...');
+
+    let existing = await this.localStorage.readFile<LADUserRegistry>(this.registryPath);
+
+    // If local is missing or empty, attempt reading from remote storage
+    if (!existing && this.remoteStorage) {
+      console.log('[LAD:UserRegistry] Local user.json not found. Checking remote storage...');
+      try {
+        const remoteReg = await this.remoteStorage.readFile<LADUserRegistry>(this.registryPath);
+        if (remoteReg) {
+          validateUserRegistry(remoteReg);
+          console.log('[LAD:UserRegistry] Found user.json on remote storage!');
+          existing = remoteReg;
+          await this.localStorage.writeFile(this.registryPath, existing);
+        }
+      } catch (err) {
+        console.warn('[LAD:UserRegistry] Failed to fetch remote user.json:', err);
+      }
+    }
+
     if (existing) {
       try {
         validateUserRegistry(existing);
@@ -43,16 +108,24 @@ export class UserRegistryManager {
         // Sanitize legacy placeholder email if present
         if (existing.identities[0]?.email === 'user@ladboard.local') {
           existing.identities[0].email = email || undefined;
-          await this.storage.writeFile(this.registryPath, existing);
+          await this.localStorage.writeFile(this.registryPath, existing);
         }
         this.registry = existing;
+
+        // If remote storage is active, ensure remote has latest user.json
+        if (this.remoteStorage) {
+          this.syncWithRemote().catch((e) => console.warn('[LAD:UserRegistry] Background sync error:', e));
+        }
+
+        console.log('[LAD:UserRegistry] ✅ Loaded existing registry for user:', existing.user_id, 'spaces:', existing.spaces.length);
         return existing;
       } catch (err) {
-        console.warn('Existing user.json failed validation, creating fresh registry:', err);
+        console.warn('[LAD:UserRegistry] Existing user.json failed validation, creating fresh registry:', err);
       }
     }
 
     // Initialize fresh user.json
+    console.log('[LAD:UserRegistry] Initializing fresh user.json...');
     const userId = this.generateUserId();
     const defaultSpaceId = this.generateSpaceId();
 
@@ -100,6 +173,7 @@ export class UserRegistryManager {
 
     this.registry = freshRegistry;
     await this.saveRegistry(freshRegistry);
+    console.log('[LAD:UserRegistry] ✅ Fresh user.json created with user_id:', userId);
     return freshRegistry;
   }
 
@@ -112,7 +186,20 @@ export class UserRegistryManager {
     registry.updated_at = new Date().toISOString();
     registry.version = (registry.version || 0) + 1;
     this.registry = registry;
-    await this.storage.writeFile(this.registryPath, registry);
+
+    // Save to local storage
+    await this.localStorage.writeFile(this.registryPath, registry);
+
+    // Save to remote storage if connected
+    if (this.remoteStorage) {
+      try {
+        console.log('[LAD:UserRegistry] Persisting user.json to remote storage...');
+        await this.remoteStorage.writeFile(this.registryPath, registry);
+        console.log('[LAD:UserRegistry] ✅ Persisted user.json to remote storage');
+      } catch (err) {
+        console.warn('[LAD:UserRegistry] Could not persist user.json to remote storage:', err);
+      }
+    }
   }
 
   async addSpace(spaceRef: LADUserSpaceRef): Promise<void> {

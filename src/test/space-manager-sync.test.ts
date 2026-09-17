@@ -137,4 +137,73 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     expect(customized.color).toBe('cyan');
     expect(customized.description).toBe('Quantum simulation and structural biology');
   });
+
+  it('repairs and uploads all local space data (manifest, graph, objects, ops) to remote storage', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const manager = new SpaceManager(localStorage, remoteStorage);
+
+    const manifest = await manager.createSpace({
+      spaceName: 'Trip to Japan',
+      createdByUserId: 'usr_traveler_01',
+    });
+
+    const space = await manager.loadSpace(manifest.space_id, 'usr_traveler_01');
+
+    // Create an object
+    const flightObj = space.objectStore.createObject({
+      title: 'Flight Tickets',
+      domain: 'travel',
+      actorUserId: 'usr_traveler_01',
+    });
+    await space.objectStore.save(flightObj);
+
+    // Run repair & upload
+    const result = await manager.repairAndUploadSpaceToRemote(manifest.space_id, 'usr_traveler_01');
+    expect(result.success).toBe(true);
+    expect(result.manifestUploaded).toBe(true);
+    expect(result.objectsUploaded).toBe(1);
+    expect(result.nodesUploaded).toBeGreaterThanOrEqual(1);
+
+    // Verify files exist in remote storage
+    const remoteManifest = await remoteStorage.readFile(`LAD/${manifest.space_id}/manifest.json`);
+    expect(remoteManifest).toBeDefined();
+
+    const remoteObj = await remoteStorage.readFile(`LAD/${manifest.space_id}/objects/${flightObj.object_id}.json`);
+    expect(remoteObj).toBeDefined();
+    expect((remoteObj as any).title).toBe('Flight Tickets');
+
+    const remoteNodes = await remoteStorage.readFile(`LAD/${manifest.space_id}/graph/nodes.json`);
+    expect(remoteNodes).toBeDefined();
+    expect(Array.isArray(remoteNodes)).toBe(true);
+  });
+
+  it('replicates remote space into a clean local storage when an invitee loads the space', async () => {
+    const remoteStorage = new MemoryStorageProvider();
+
+    // User A sets up space on remote
+    const userALocal = new MemoryStorageProvider();
+    const managerA = new SpaceManager(userALocal, remoteStorage);
+    const spaceA = await managerA.createSpace({
+      spaceName: 'Shared Project',
+      createdByUserId: 'usr_alice_01',
+    });
+    const loadedA = await managerA.loadSpace(spaceA.space_id, 'usr_alice_01');
+    const noteObj = loadedA.objectStore.createObject({
+      title: 'Project Roadmap',
+      domain: 'work',
+      actorUserId: 'usr_alice_01',
+    });
+    await loadedA.objectStore.save(noteObj);
+    await managerA.repairAndUploadSpaceToRemote(spaceA.space_id, 'usr_alice_01');
+
+    // User B joins with empty local storage
+    const userBLocal = new MemoryStorageProvider();
+    const managerB = new SpaceManager(userBLocal, remoteStorage);
+
+    const loadedB = await managerB.loadSpace(spaceA.space_id, 'usr_bob_02', 5000, 'Shared Project');
+    expect(loadedB.manifest.space_name).toBe('Shared Project');
+    expect(loadedB.objectStore.getAll().length).toBe(1);
+    expect(loadedB.objectStore.getAll()[0].title).toBe('Project Roadmap');
+  });
 });

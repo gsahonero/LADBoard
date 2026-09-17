@@ -13,6 +13,7 @@ import {
   Palette,
   Smile,
   FileText,
+  Loader2,
 } from 'lucide-react';
 import {
   SPACE_ICON_PRESETS,
@@ -29,6 +30,8 @@ export const SpaceManagerModal: React.FC<{
 }> = ({ isOpen, onClose, onOpenCreateSpace }) => {
   const { spaces, activeSpaceId, switchSpace, createSpace, updateSpaceIdentity, inviteMember } = useLAD();
   const { t } = useI18n();
+
+  const [isInviting, setIsInviting] = useState(false);
 
   // Create Space form state
   const [newSpaceName, setNewSpaceName] = useState('');
@@ -92,15 +95,22 @@ export const SpaceManagerModal: React.FC<{
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
-    setInviteName('');
-    setInviteEmail('');
-    setSuccessMsg(t('peopleView.invitationSent'));
-    setTimeout(() => {
-      setSuccessMsg('');
-      onClose();
-    }, 1000);
+    if (!inviteEmail.trim() || isInviting) return;
+    setIsInviting(true);
+    try {
+      await inviteMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
+      setInviteName('');
+      setInviteEmail('');
+      setSuccessMsg(t('peopleView.invitationSent'));
+      setTimeout(() => {
+        setSuccessMsg('');
+        onClose();
+      }, 1000);
+    } catch (err) {
+      console.error('Invite error in modal:', err);
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   return (
@@ -557,14 +567,23 @@ export const SpaceManagerModal: React.FC<{
                   </div>
 
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={!isInviting ? { scale: 1.02 } : undefined}
+                    whileTap={!isInviting ? { scale: 0.98 } : undefined}
                     onClick={handleInvite}
-                    disabled={!inviteEmail.trim()}
-                    className="w-full mt-2 py-3 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer"
+                    disabled={!inviteEmail.trim() || isInviting}
+                    className="w-full mt-2 py-3 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    {t('spaces.sendInvite')}
+                    {isInviting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>{t('spaces.sending') || 'Sending...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span>{t('spaces.sendInvite')}</span>
+                      </>
+                    )}
                   </motion.button>
                 </div>
               )}
