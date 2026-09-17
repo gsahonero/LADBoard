@@ -275,9 +275,14 @@ export const SpaceManagerModal: React.FC<{
 
                             {/* Icon Picker */}
                             <div>
-                              <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                                Space Icon
-                              </label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                  Space Icon
+                                </label>
+                                <span className="text-[10px] text-slate-400">
+                                  Paste emoji, name, or URL
+                                </span>
+                              </div>
                               <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
                                 {SPACE_ICON_PRESETS.map((ic) => (
                                   <button
@@ -293,6 +298,39 @@ export const SpaceManagerModal: React.FC<{
                                     <ModernIcon name={ic} className="w-4 h-4" />
                                   </button>
                                 ))}
+                              </div>
+
+                              {/* Custom Icon Paste Input */}
+                              <div className="flex items-center gap-2 mt-2">
+                                <div className="relative flex-1">
+                                  <input
+                                    type="text"
+                                    value={editIcon}
+                                    onChange={(e) => setEditIcon(e.target.value)}
+                                    placeholder="Paste emoji (🚀, 🧪, 🌿), icon name, or image URL..."
+                                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-3.5 h-3.5 pointer-events-none text-blue-500">
+                                    <ModernIcon name={editIcon} className="w-3.5 h-3.5" />
+                                  </div>
+                                </div>
+                                <div className="hidden sm:flex items-center gap-1">
+                                  {['🚀', '🔬', '💡', '🌿', '🎨', '🛡️', '🎯'].map((em) => (
+                                    <button
+                                      key={em}
+                                      type="button"
+                                      onClick={() => setEditIcon(em)}
+                                      className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-all cursor-pointer ${
+                                        editIcon === em
+                                          ? 'bg-blue-100 dark:bg-blue-950 ring-2 ring-blue-500'
+                                          : 'hover:bg-slate-200 dark:hover:bg-slate-700 opacity-80 hover:opacity-100'
+                                      }`}
+                                      title={em}
+                                    >
+                                      {em}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
@@ -464,10 +502,15 @@ export const SpaceManagerModal: React.FC<{
 
                   {/* Icon Selector */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1 flex items-center gap-1.5">
-                      <Smile className="w-3.5 h-3.5 text-blue-500" />
-                      Choose Space Icon
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Smile className="w-3.5 h-3.5 text-blue-500" />
+                        Choose Space Icon
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Paste emoji, name, or URL
+                      </span>
+                    </div>
                     <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
                       {SPACE_ICON_PRESETS.map((ic) => (
                         <button
@@ -483,6 +526,39 @@ export const SpaceManagerModal: React.FC<{
                           <ModernIcon name={ic} className="w-4 h-4" />
                         </button>
                       ))}
+                    </div>
+
+                    {/* Custom Icon Paste Input */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={newSpaceIcon}
+                          onChange={(e) => setNewSpaceIcon(e.target.value)}
+                          placeholder="Paste emoji (🚀, 🧪, 🌿), icon name, or image URL..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-3.5 h-3.5 pointer-events-none text-blue-500">
+                          <ModernIcon name={newSpaceIcon} className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                      <div className="hidden sm:flex items-center gap-1">
+                        {['🚀', '🔬', '💡', '🌿', '🎨', '🛡️', '🎯'].map((em) => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={() => setNewSpaceIcon(em)}
+                            className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-all cursor-pointer ${
+                              newSpaceIcon === em
+                                ? 'bg-blue-100 dark:bg-blue-950 ring-2 ring-blue-500'
+                                : 'hover:bg-slate-200 dark:hover:bg-slate-700 opacity-80 hover:opacity-100'
+                            }`}
+                            title={em}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

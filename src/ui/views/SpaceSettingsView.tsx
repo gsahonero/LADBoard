@@ -415,11 +415,18 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           </div>
         </div>
 
-        {/* Modern Icon Selector */}
-        <div>
-          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2">
-            {t('spaceSettings.spaceIcon')}
-          </label>
+        {/* Modern Icon Selector & Custom Paste */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+              {t('spaceSettings.spaceIcon')}
+            </label>
+            <span className="text-[10px] text-slate-400">
+              {t('spaceSettings.customIconHelp')}
+            </span>
+          </div>
+
+          {/* Quick presets */}
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -432,9 +439,9 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                 'palette',
                 'book',
                 'code',
-                'box',
-                'compass',
                 'sparkles',
+                'coffee',
+                'rocket',
               ] as ModernIconName[]
             ).map((iconName) => {
               const isSelected = icon === iconName;
@@ -443,10 +450,10 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                   key={iconName}
                   type="button"
                   onClick={() => setIcon(iconName)}
-                  className={`w-10 h-10 rounded-2xl flex items-center justify-center border transition-all cursor-pointer ${
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${
                     isSelected
-                      ? 'border-lad-500 bg-lad-50 dark:bg-lad-950 text-lad-600 dark:text-lad-300 shadow-xs scale-105'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
+                      ? 'border-lad-500 bg-lad-50 dark:bg-lad-950 text-lad-600 dark:text-lad-300 shadow-xs scale-105 ring-2 ring-lad-500/20'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50'
                   }`}
                   title={iconName}
                 >
@@ -454,6 +461,41 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                 </button>
               );
             })}
+          </div>
+
+          {/* Custom Icon Paste Input with Live Preview */}
+          <div className="flex items-center gap-2 pt-1">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder={t('spaceSettings.customIconPlaceholder')}
+                className="w-full pl-9 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:border-lad-500"
+              />
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 pointer-events-none text-lad-500">
+                <ModernIcon name={icon} className="w-4 h-4" />
+              </div>
+            </div>
+
+            {/* Quick emoji suggestion buttons */}
+            <div className="hidden sm:flex items-center gap-1">
+              {['🚀', '🔬', '💡', '🌿', '🎨', '🛡️', '🎯', '☕', '🧠'].map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  onClick={() => setIcon(em)}
+                  className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition-all cursor-pointer ${
+                    icon === em
+                      ? 'bg-lad-100 dark:bg-lad-950 ring-2 ring-lad-500 scale-110'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 opacity-80 hover:opacity-100'
+                  }`}
+                  title={em}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
