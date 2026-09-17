@@ -140,6 +140,56 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     return deriveCalendarEvents(objects, activeManifest?.space_name || 'LAD Space');
   }, [objects, activeManifest?.space_name]);
 
+  // Track if user has unsaved changes to remind them at all times
+  const hasChanges = useMemo(() => {
+    if (!activeManifest) return false;
+    const nameChanged = spaceName.trim() !== (activeManifest.space_name || '').trim();
+    const iconChanged = icon !== (activeManifest.icon || 'folder');
+    const colorChanged = color !== (activeManifest.color || 'blue');
+    const descChanged = description.trim() !== (activeManifest.description || '').trim();
+    const currentCats = [...categories].sort().join(',');
+    const origCats = [...(activeManifest.categories || [])].sort().join(',');
+    const catsChanged = currentCats !== origCats;
+    const calEnabledChanged = calendarEnabled !== (activeManifest.settings?.calendar?.enabled ?? false);
+    const calModeChanged = calendarMode !== (activeManifest.settings?.calendar?.mode ?? 'dedicated');
+    const inviteMethodChanged = inviteMethod !== (activeManifest.settings?.invitations?.default_method ?? 'gmail');
+    const defaultRoleChanged = defaultRole !== (activeManifest.settings?.invitations?.default_role ?? 'editor');
+
+    return (
+      nameChanged ||
+      iconChanged ||
+      colorChanged ||
+      descChanged ||
+      catsChanged ||
+      calEnabledChanged ||
+      calModeChanged ||
+      inviteMethodChanged ||
+      defaultRoleChanged
+    );
+  }, [
+    activeManifest,
+    spaceName,
+    icon,
+    color,
+    description,
+    categories,
+    calendarEnabled,
+    calendarMode,
+    inviteMethod,
+    defaultRole,
+  ]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
   const auth = authService.getState();
 
   const handleSaveIdentity = async () => {
@@ -267,15 +317,60 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
         </div>
       </div>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-          <Sliders className="w-6 h-6 text-lad-500" />
-          {t('spaceSettings.title')}
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {t('spaceSettings.subtitle')}
-        </p>
+      {/* Sticky Header Bar with Persistent Save & Reminder - Visible At All Times */}
+      <div className="sticky top-0 z-20 -mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 rounded-xl bg-lad-50 dark:bg-lad-950/40 text-lad-600 dark:text-lad-400 shrink-0">
+            <ModernIcon name={activeIconKey} className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                {spaceName || activeManifest.space_name}
+              </h1>
+              {hasChanges ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
+                  <AlertCircle className="w-3 h-3" />
+                  {t('spaceSettings.unsavedChanges')}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  {t('spaceSettings.allSaved')}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+              {hasChanges ? t('spaceSettings.unsavedReminder') : t('spaceSettings.subtitle')}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <button
+            type="button"
+            onClick={handleSaveIdentity}
+            disabled={isSaving}
+            aria-label={t('spaceSettings.saveChanges')}
+            className={`px-5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+              hasChanges
+                ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-md shadow-lad-500/20 ring-2 ring-lad-500/40'
+                : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>{t('spaceSettings.saving')}</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>{t('spaceSettings.saveChanges')}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {successMsg && (
@@ -816,9 +911,23 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           type="button"
           onClick={handleSaveIdentity}
           disabled={isSaving}
-          className="px-6 py-2.5 text-xs font-bold text-white bg-lad-600 hover:bg-lad-700 active:scale-95 rounded-2xl shadow-sm transition-all cursor-pointer"
+          className={`px-6 py-2.5 text-xs font-bold rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 ${
+            hasChanges
+              ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-md shadow-lad-500/20 ring-2 ring-lad-500/40'
+              : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
         >
-          {isSaving ? 'Saving...' : t('spaceSettings.saveChanges')}
+          {isSaving ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>{t('spaceSettings.saving')}</span>
+            </>
+          ) : (
+            <>
+              <Check className="w-3.5 h-3.5" />
+              <span>{t('spaceSettings.saveChanges')}</span>
+            </>
+          )}
         </button>
       </div>
 
