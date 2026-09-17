@@ -90,10 +90,12 @@ export class SyncCoordinator {
     this.remoteStorage = remote;
   }
 
-  async startPeriodicSync(intervalMs: number = 15000) {
+  async startPeriodicSync(intervalMs: number = 30000) {
     if (this.syncIntervalId) clearInterval(this.syncIntervalId);
     this.syncIntervalId = setInterval(() => {
-      this.triggerSync();
+      this.triggerSync({ silent: true }).catch((err) => {
+        console.warn('[LAD:SyncCoordinator] Silent background sync error:', err);
+      });
     }, intervalMs);
   }
 
@@ -107,7 +109,9 @@ export class SyncCoordinator {
   /**
    * Main synchronization routine: Push pending local ops, pull remote delta ops
    */
-  async triggerSync(): Promise<void> {
+  async triggerSync(options?: { silent?: boolean }): Promise<void> {
+    const isSilent = options?.silent ?? false;
+
     if (!this.remoteStorage) {
       // Local-only mode
       const queueCount = this.offlineQueue.size();
@@ -123,12 +127,17 @@ export class SyncCoordinator {
       return;
     }
 
-    try {
-      this.updateState({ status: 'syncing' });
+    const pendingOps = this.offlineQueue.getQueue();
+    const hasLocalPending = pendingOps.length > 0;
 
+    // Do NOT transition UI to 'syncing' if this is a silent check with no pending local ops
+    if (!isSilent || hasLocalPending) {
+      this.updateState({ status: 'syncing' });
+    }
+
+    try {
       // Step 1: Push pending local operations to remote
-      const pendingOps = this.offlineQueue.getQueue();
-      if (pendingOps.length > 0) {
+      if (hasLocalPending) {
         const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
         await remoteOpLog.loadAll();
 
@@ -179,7 +188,12 @@ export class SyncCoordinator {
             } else if (localOp.type.startsWith('graph.edge.')) {
               const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
               if (edges) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, edges);
-            } else if (localOp.type.startsWith('graph.') || localOp.type.startsWith('membership.')) {
+            } else if (
+              localOp.type.startsWith('graph.') ||
+              localOp.type.startsWith('membership.') ||
+              localOp.type.startsWith('member.') ||
+              localOp.type.startsWith('invitation.')
+            ) {
               const nodes = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
               if (nodes) await this.remoteStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, nodes);
               const edges = await this.localStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
@@ -244,7 +258,12 @@ export class SyncCoordinator {
                 await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
                 if (this.graphStore) await this.graphStore.load();
               }
-            } else if (newOp.type.startsWith('graph.') || newOp.type.startsWith('membership.')) {
+            } else if (
+              newOp.type.startsWith('graph.') ||
+              newOp.type.startsWith('membership.') ||
+              newOp.type.startsWith('member.') ||
+              newOp.type.startsWith('invitation.')
+            ) {
               const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
               if (remoteNodes) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
               const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
@@ -262,6 +281,12 @@ export class SyncCoordinator {
         if (this.onRemoteOperationsApplied) {
           await this.onRemoteOperationsApplied(newRemoteOps);
         }
+      }
+
+      // If silent background check and nothing was pushed and nothing was pulled,
+      // exit immediately: DO NOT update state, DO NOT bump lastSyncedAt, DO NOT trigger re-renders!
+      if (isSilent && !hasLocalPending && newRemoteOps.length === 0) {
+        return;
       }
 
       this.updateState({

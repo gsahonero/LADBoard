@@ -312,7 +312,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     });
 
-    activeSpace.syncCoordinator.startPeriodicSync(15000);
+    if (storageManager.getRemoteProvider()) {
+      const interval = userRegistry?.preferences?.active_evaluation_interval_ms || 30000;
+      activeSpace.syncCoordinator.startPeriodicSync(interval);
+    }
 
     return () => {
       unsubAlerts();
@@ -320,7 +323,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubSync();
       activeSpace.syncCoordinator.stopPeriodicSync();
     };
-  }, [activeSpace?.manifest.space_id]);
+  }, [activeSpace?.manifest.space_id, userRegistry?.preferences?.active_evaluation_interval_ms, storageManager]);
 
   const refreshSpaceState = useCallback(() => {
     if (!activeSpace) return;
@@ -1181,7 +1184,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     if (activeSpace) {
-      await activeSpace.syncCoordinator.triggerSync();
+      await activeSpace.syncCoordinator.triggerSync({ silent: false });
       refreshSpaceState();
     }
   }, [authService, storageManager, connectGoogleDrive, activeSpace, refreshSpaceState]);

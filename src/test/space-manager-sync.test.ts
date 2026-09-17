@@ -349,6 +349,48 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     expect(fallbackState.errorMessage).toContain('Preserved locally');
   });
 
+  it('does not trigger sync state changes or bump timestamps when silent check runs with no changes', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const manager = new SpaceManager(localStorage, remoteStorage);
+
+    const space = await manager.createSpace({
+      spaceName: 'Silent Sync Test',
+      icon: 'sparkles',
+      color: 'blue',
+      createdByUserId: 'usr_silent_01',
+    });
+
+    const loaded = await manager.loadSpace(space.space_id, 'usr_silent_01');
+    loaded.syncCoordinator.setRemoteStorage(remoteStorage);
+
+    // Initial manual sync sets state to synced with timestamp
+    await loaded.syncCoordinator.triggerSync();
+    const initialSyncState = loaded.syncCoordinator.getState();
+    expect(initialSyncState.status).toBe('synced');
+    const initialTimestamp = initialSyncState.lastSyncedAt;
+    expect(initialTimestamp).toBeTruthy();
+
+    // Track state changes
+    let stateUpdatesCount = 0;
+    const unsub = loaded.syncCoordinator.subscribe(() => {
+      stateUpdatesCount++;
+    });
+    // First subscribe call fires once
+    expect(stateUpdatesCount).toBe(1);
+
+    // Run silent background check with ZERO local pending ops and ZERO remote ops
+    await loaded.syncCoordinator.triggerSync({ silent: true });
+
+    // State must NOT have changed: no 'syncing' flicker, no timestamp bump, no listener notifications
+    const postCheckState = loaded.syncCoordinator.getState();
+    expect(postCheckState.status).toBe('synced');
+    expect(postCheckState.lastSyncedAt).toBe(initialTimestamp);
+    expect(stateUpdatesCount).toBe(1); // No new state emissions
+
+    unsub();
+  });
+
   it('skips default space creation when skipDefaultSpace option is true', async () => {
     const localStorage = new MemoryStorageProvider();
     const regManager = new UserRegistryManager(localStorage);
