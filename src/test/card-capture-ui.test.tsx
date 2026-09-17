@@ -38,8 +38,18 @@ describe('Card & Capture UI Automated Test Suite', () => {
       expect(screen.getByText('$19')).toBeInTheDocument();
     });
 
-    // Submitting form invokes createObjectFromCapture with extracted slots
+    // Submitting form triggers confirmation modal since finer details were not manually changed
     fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('card-inference-confirm-modal')).toBeInTheDocument();
+      expect(screen.getByText(/Confirm Inferred Card/i)).toBeInTheDocument();
+      expect(screen.getByText(/Bank A checking account new balance is \$19/i)).toBeInTheDocument();
+    });
+
+    // Confirming on modal saves the inferred card
+    const confirmBtn = screen.getByTestId('confirm-inference-button');
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(createObjectFromCapture).toHaveBeenCalled();
@@ -330,5 +340,114 @@ describe('Card & Capture UI Automated Test Suite', () => {
     const registered = SchemaRegistry.getInstance().getCardType(savedDefinition.id);
     expect(registered).toBeDefined();
     expect(registered?.name).toBe('Pet Vaccination');
+  });
+
+  it('triggers confirmation modal when finer details are untouched and returns to finer details view when declined', async () => {
+    const createObjectFromCapture = vi.fn().mockResolvedValue({} as any);
+
+    const mockContext: any = {
+      createObjectFromCapture,
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext}>
+          <SmartCaptureBar />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    const input = screen.getByPlaceholderText(/Type anything/i);
+    fireEvent.change(input, {
+      target: { value: 'Doctor says continue meds, blood test in 2 weeks, dad schedules follow-up' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inferred Structure/i)).toBeInTheDocument();
+    });
+
+    // Submitting with untouched finer details triggers confirmation modal
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('card-inference-confirm-modal')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Doctor says continue meds, blood test in 2 weeks, dad schedules follow-up/i)
+      ).toBeInTheDocument();
+    });
+
+    // Declining on modal returns to finer details view
+    const declineBtn = screen.getByTestId('decline-inference-button');
+    fireEvent.click(declineBtn);
+
+    // Modal is now closed and finer details drawer is open
+    await waitFor(() => {
+      expect(screen.queryByTestId('card-inference-confirm-modal')).not.toBeInTheDocument();
+      expect(screen.getByTestId('finer-details-drawer')).toBeInTheDocument();
+      expect(screen.getByTestId('finer-details-title-input')).toBeInTheDocument();
+    });
+
+    // User modifies card title in finer details
+    const titleInput = screen.getByTestId('finer-details-title-input');
+    fireEvent.change(titleInput, { target: { value: 'Custom Health Plan (Dad)' } });
+
+    // Submitting now directly saves without re-prompting confirmation modal
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(createObjectFromCapture).toHaveBeenCalled();
+      const callArgs = createObjectFromCapture.mock.calls[0][0];
+      expect(callArgs.title).toBe('Custom Health Plan (Dad)');
+      expect(callArgs.suggestedAttributes.raw_thought).toBe(
+        'Doctor says continue meds, blood test in 2 weeks, dad schedules follow-up'
+      );
+    });
+  });
+
+  it('saves directly without confirmation modal when user modifies finer details before submitting', async () => {
+    const createObjectFromCapture = vi.fn().mockResolvedValue({} as any);
+
+    const mockContext: any = {
+      createObjectFromCapture,
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext}>
+          <SmartCaptureBar />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    const input = screen.getByPlaceholderText(/Type anything/i);
+    fireEvent.change(input, {
+      target: { value: 'Bank A checking account new balance is $19' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Fine-tune details/i)).toBeInTheDocument();
+    });
+
+    // Open finer details drawer
+    fireEvent.click(screen.getByText(/Fine-tune details/i));
+    expect(screen.getByTestId('finer-details-drawer')).toBeInTheDocument();
+
+    // Modify title in finer details
+    const titleInput = screen.getByTestId('finer-details-title-input');
+    fireEvent.change(titleInput, { target: { value: 'Emergency Checking Balance' } });
+
+    // Submit form
+    fireEvent.submit(input.closest('form')!);
+
+    // Should save directly without modal
+    await waitFor(() => {
+      expect(screen.queryByTestId('card-inference-confirm-modal')).not.toBeInTheDocument();
+      expect(createObjectFromCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Emergency Checking Balance',
+          domain: 'finances',
+        })
+      );
+    });
   });
 });

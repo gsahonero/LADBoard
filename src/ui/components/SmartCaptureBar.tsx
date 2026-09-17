@@ -11,6 +11,7 @@ import { InferredStructure } from '../../core/objects/types';
 import { LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { CardInferenceConfirmModal } from './CardInferenceConfirmModal';
 import {
   Sparkles,
   ArrowRight,
@@ -33,6 +34,8 @@ export const SmartCaptureBar: React.FC = () => {
   const [input, setInput] = useState('');
   const [inferred, setInferred] = useState<InferredStructure | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hasModifiedDetails, setHasModifiedDetails] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Editable overrides when expanded
@@ -70,6 +73,7 @@ export const SmartCaptureBar: React.FC = () => {
 
   const handleFieldChange = (key: string, value: any) => {
     setFieldOverrides((prev) => ({ ...prev, [key]: value }));
+    setHasModifiedDetails(true);
   };
 
   const handleToggleChecklistItem = (index: number) => {
@@ -77,6 +81,7 @@ export const SmartCaptureBar: React.FC = () => {
     if (list[index]) {
       list[index].completed = !list[index].completed;
       handleFieldChange('checklist', list);
+      setHasModifiedDetails(true);
     }
   };
 
@@ -85,20 +90,18 @@ export const SmartCaptureBar: React.FC = () => {
     const list = [...(fieldOverrides.checklist || [])];
     list.push({ id: `item_${Date.now()}`, text: text.trim(), completed: false });
     handleFieldChange('checklist', list);
+    setHasModifiedDetails(true);
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!input.trim()) return;
-
+  const buildFinalStructure = (): InferredStructure => {
     const mergedFieldValues = {
       ...(inferred?.fieldValues || {}),
       ...fieldOverrides,
     };
 
-    const finalStructure: InferredStructure = {
+    return {
       rawText: input,
-      title: overrideTitle.trim() || input.trim(),
+      title: overrideTitle.trim() || inferred?.title || input.trim(),
       domain: overrideDomain || inferred?.domain || 'general',
       cardTypeId: overrideCardTypeId || inferred?.cardTypeId,
       priority: overridePriority || inferred?.priority || 'medium',
@@ -109,20 +112,51 @@ export const SmartCaptureBar: React.FC = () => {
       extractedEntities: inferred?.extractedEntities || [],
       suggestedAttributes: {
         ...(inferred?.suggestedAttributes || {}),
+        raw_thought: input,
         ...mergedFieldValues,
       },
       fieldValues: mergedFieldValues,
     };
+  };
 
+  const executeSave = async () => {
+    const finalStructure = buildFinalStructure();
     await createObjectFromCapture(finalStructure);
     setInput('');
     setInferred(null);
     setIsExpanded(false);
     setFieldOverrides({});
+    setHasModifiedDetails(false);
+    setShowConfirmModal(false);
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!input.trim()) return;
+
+    // If user has NOT changed anything on finer details, trigger confirmation modal
+    if (!hasModifiedDetails) {
+      setShowConfirmModal(true);
+      return;
+    }
+
+    // If user modified finer details, save directly as per their edits
+    await executeSave();
+  };
+
+  const handleDeclineConfirm = () => {
+    setShowConfirmModal(false);
+    setIsExpanded(true);
+    setHasModifiedDetails(true);
+  };
+
+  const handleAcceptConfirm = async () => {
+    await executeSave();
   };
 
   const handleStarterClick = (promptTemplate: string) => {
     setInput(promptTemplate);
+    setHasModifiedDetails(false);
     inputRef.current?.focus();
   };
 
@@ -151,9 +185,9 @@ export const SmartCaptureBar: React.FC = () => {
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => {
-              if (inferred) setIsExpanded(true);
+            onChange={(e) => {
+              setInput(e.target.value);
+              setHasModifiedDetails(false);
             }}
             placeholder={t('capture.placeholder')}
             className="w-full pl-10 pr-10 py-3 text-sm font-medium rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-lad-500 focus:border-transparent text-slate-900 dark:text-white shadow-inner transition-all placeholder:text-slate-400"
@@ -166,8 +200,10 @@ export const SmartCaptureBar: React.FC = () => {
                 setInferred(null);
                 setIsExpanded(false);
                 setFieldOverrides({});
+                setHasModifiedDetails(false);
+                setShowConfirmModal(false);
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -177,7 +213,8 @@ export const SmartCaptureBar: React.FC = () => {
         <button
           type="submit"
           disabled={!input.trim()}
-          className="px-4 py-3 bg-lad-600 hover:bg-lad-700 disabled:opacity-40 disabled:hover:bg-lad-600 text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center gap-1.5 whitespace-nowrap"
+          className="px-4 py-3 bg-lad-600 hover:bg-lad-700 disabled:opacity-40 disabled:hover:bg-lad-600 text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+          data-testid="smart-capture-submit-btn"
         >
           <span>{t('capture.submit')}</span>
           <ArrowRight className="w-3.5 h-3.5" />
@@ -296,7 +333,25 @@ export const SmartCaptureBar: React.FC = () => {
 
           {/* Expanded Fine-tuning controls tailored to Card Type Schema */}
           {isExpanded && (
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3" data-testid="finer-details-drawer">
+              {/* Card Title Override */}
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                  Card Title
+                </label>
+                <input
+                  type="text"
+                  value={overrideTitle}
+                  onChange={(e) => {
+                    setOverrideTitle(e.target.value);
+                    setHasModifiedDetails(true);
+                  }}
+                  placeholder="Card Title"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  data-testid="finer-details-title-input"
+                />
+              </div>
+
               {/* Category & Card Type Selector */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
@@ -308,12 +363,14 @@ export const SmartCaptureBar: React.FC = () => {
                     onChange={(e) => {
                       const newDomain = e.target.value;
                       setOverrideDomain(newDomain);
+                      setHasModifiedDetails(true);
                       const types = registry.getCardTypesForCategory(newDomain);
                       if (types.length > 0) {
                         setOverrideCardTypeId(types[0].id);
                       }
                     }}
-                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
+                    data-testid="finer-details-category-select"
                   >
                     {registry.getAllCategories().map((cat) => (
                       <option key={cat.id} value={cat.id}>
@@ -329,8 +386,12 @@ export const SmartCaptureBar: React.FC = () => {
                   </label>
                   <select
                     value={overrideCardTypeId || ''}
-                    onChange={(e) => setOverrideCardTypeId(e.target.value)}
-                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                    onChange={(e) => {
+                      setOverrideCardTypeId(e.target.value);
+                      setHasModifiedDetails(true);
+                    }}
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
+                    data-testid="finer-details-cardtype-select"
                   >
                     {availableCardTypes.map((ct) => (
                       <option key={ct.id} value={ct.id}>
@@ -513,6 +574,17 @@ export const SmartCaptureBar: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Confirmation Modal when user submits without having modified finer details */}
+      <CardInferenceConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        rawText={input}
+        inferred={inferred ? buildFinalStructure() : null}
+        cardType={activeCardType}
+        onConfirm={handleAcceptConfirm}
+        onDecline={handleDeclineConfirm}
+      />
     </div>
   );
 };
