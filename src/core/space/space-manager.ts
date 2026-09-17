@@ -84,7 +84,11 @@ export class SpaceManager {
     // Write manifest to storage
     await this.localStorage.writeFile(this.getManifestPath(spaceId), manifest);
     if (this.remoteStorage) {
-      await this.remoteStorage.writeFile(this.getManifestPath(spaceId), manifest);
+      try {
+        await this.remoteStorage.writeFile(this.getManifestPath(spaceId), manifest);
+      } catch (err) {
+        console.warn('[LAD:SpaceManager] Remote storage write failed for new space manifest, falling back to local:', err);
+      }
     }
 
     return manifest;

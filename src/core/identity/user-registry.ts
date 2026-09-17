@@ -178,7 +178,7 @@ export class UserRegistryManager {
           color: 'blue',
           description: 'Personal life, health, finances & daily flow',
           categories: ['health', 'finances', 'documents', 'shopping', 'home'],
-          storage_provider: 'local_indexeddb',
+          storage_provider: provider === 'google' && this.remoteStorage ? 'google_drive' : 'local_indexeddb',
           storage_reference: defaultSpaceId,
           role: 'owner',
           status: 'active',

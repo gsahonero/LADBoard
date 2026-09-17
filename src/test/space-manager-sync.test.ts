@@ -290,4 +290,61 @@ describe('Space Manager, Offline Queue & Conflict Resolver', () => {
     const remoteBobNode = remoteNodes?.find((n: any) => n.ref_id === 'usr_bob_editor');
     expect(remoteBobNode?.metadata?.role).toBe('editor');
   });
+
+  it('defaults to remote storage sync and gracefully falls back to local sync on failure', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const manager = new SpaceManager(localStorage, remoteStorage);
+
+    const space = await manager.createSpace({
+      spaceName: 'Sync Fallback Test',
+      createdByUserId: 'usr_tester',
+    });
+
+    const loaded = await manager.loadSpace(space.space_id, 'usr_tester');
+    expect(loaded.syncCoordinator).toBeDefined();
+
+    // Enqueue a local operation
+    await loaded.changeAggregator.commitImmediate({
+      targetId: 'obj_test_1',
+      type: 'object.create',
+      actor: 'usr_tester',
+      spaceId: space.space_id,
+      patch: { title: 'First Task' },
+    });
+
+    expect(loaded.offlineQueue.size()).toBe(1);
+
+    // 1. By default, with remoteStorage configured, triggerSync synchronizes with remote
+    await loaded.syncCoordinator.triggerSync();
+    const state = loaded.syncCoordinator.getState();
+    expect(state.status).toBe('synced');
+    expect(loaded.offlineQueue.size()).toBe(0);
+
+    // 2. Simulate remote storage failure (e.g. throwing network error)
+    remoteStorage.writeFile = async () => {
+      throw new Error('Google Drive Network Timeout 503');
+    };
+
+    // Commit another local operation
+    await loaded.changeAggregator.commitImmediate({
+      targetId: 'obj_test_2',
+      type: 'object.create',
+      actor: 'usr_tester',
+      spaceId: space.space_id,
+      patch: { title: 'Second Task' },
+    });
+    expect(loaded.offlineQueue.size()).toBe(1);
+
+    // Trigger sync: it attempts GDrive, and on failure falls back to local sync
+    await loaded.syncCoordinator.triggerSync();
+    const fallbackState = loaded.syncCoordinator.getState();
+
+    // Local changes are safely preserved in offlineQueue
+    expect(loaded.offlineQueue.size()).toBe(1);
+    expect(fallbackState.status).toBe('pending_changes');
+    expect(fallbackState.pendingOpsCount).toBe(1);
+    expect(fallbackState.errorMessage).toContain('GDrive sync failed');
+    expect(fallbackState.errorMessage).toContain('Preserved locally');
+  });
 });

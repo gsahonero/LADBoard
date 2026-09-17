@@ -3,7 +3,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { LADUserRegistry, LADSpaceManifest, LADSpaceSettings, LADObject, LADGraphNode, LADGraphEdge, LADOperation, LADActiveAlert } from '../../core/standard/types';
+import { LADUserRegistry, LADUserSpaceRef, LADSpaceManifest, LADSpaceSettings, LADObject, LADGraphNode, LADGraphEdge, LADOperation, LADActiveAlert } from '../../core/standard/types';
 import { AuthService } from '../../core/identity/auth-service';
 import { AuthUser } from '../../core/identity/types';
 import { UserRegistryManager } from '../../core/identity/user-registry';
@@ -331,25 +331,44 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createdByUserId: userRegistry.user_id,
       });
 
-      const newRef = {
+      const auth = authService.getState();
+      const hasRemote = Boolean(storageManager.getRemoteProvider());
+      const isGoogle = auth.isAuthenticated && auth.user?.provider === 'google' && hasRemote;
+
+      const newRef: LADUserSpaceRef = {
         space_id: manifest.space_id,
         space_name: manifest.space_name,
         icon: manifest.icon,
         color: manifest.color,
         description: manifest.description,
         categories: manifest.categories,
-        storage_provider: 'local_indexeddb' as const,
+        storage_provider: (isGoogle ? 'google_drive' : 'local_indexeddb'),
         storage_reference: manifest.space_id,
-        role: 'owner' as const,
-        status: 'active' as const,
+        role: 'owner',
+        status: 'active',
         last_synced_at: new Date().toISOString(),
       };
 
       await userRegistryManager.addSpace(newRef);
       setUserRegistry({ ...userRegistryManager.getRegistry()! });
       await switchSpace(manifest.space_id);
+
+      // If GDrive has been set up, sync to GDrive by default; if it fails, fall back to local sync
+      if (isGoogle) {
+        try {
+          console.log(`[LAD:Context] Defaulting to GDrive sync for new space "${manifest.space_id}"...`);
+          await spaceManager.repairAndUploadSpaceToRemote(manifest.space_id, userRegistry.user_id);
+        } catch (err) {
+          console.warn('[LAD:Context] Initial GDrive upload failed, falling back to local sync:', err);
+          await userRegistryManager.addSpace({
+            ...newRef,
+            storage_provider: 'local_indexeddb',
+          });
+          setUserRegistry({ ...userRegistryManager.getRegistry()! });
+        }
+      }
     },
-    [spaceManager, userRegistry, userRegistryManager, switchSpace]
+    [spaceManager, userRegistry, userRegistryManager, switchSpace, authService, storageManager]
   );
 
   const updateSpaceIdentity = useCallback(
@@ -854,6 +873,16 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             userRegistryManager.setRemoteStorage(storageManager.getRemoteProvider());
             const synced = await userRegistryManager.syncWithRemote();
             if (synced) {
+              let updated = false;
+              for (const s of synced.spaces) {
+                if (s.storage_provider === 'local_indexeddb') {
+                  s.storage_provider = 'google_drive';
+                  updated = true;
+                }
+              }
+              if (updated) {
+                await userRegistryManager.saveRegistry(synced);
+              }
               setUserRegistry({ ...synced });
             }
           }
@@ -876,12 +905,20 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               }
             );
             if (spaceManager) {
-              await spaceManager.repairAndUploadSpaceToRemote(
-                activeSpace.manifest.space_id,
-                currentOwnerId
-              );
+              try {
+                await spaceManager.repairAndUploadSpaceToRemote(
+                  activeSpace.manifest.space_id,
+                  currentOwnerId
+                );
+              } catch (e) {
+                console.warn('[LAD:Context] Initial space upload to GDrive failed, staying in local sync:', e);
+              }
             }
-            await activeSpace.syncCoordinator.triggerSync();
+            try {
+              await activeSpace.syncCoordinator.triggerSync();
+            } catch (e) {
+              console.warn('[LAD:Context] GDrive sync trigger had an issue, fell back to local sync:', e);
+            }
           }
           refreshSpaceState();
           return user;

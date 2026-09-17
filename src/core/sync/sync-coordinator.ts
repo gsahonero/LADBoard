@@ -173,10 +173,13 @@ export class SyncCoordinator {
         errorMessage: null,
       });
     } catch (err: any) {
-      console.error('Sync failed:', err);
+      console.warn('[LAD:SyncCoordinator] GDrive sync failed; falling back to local sync:', err);
+      // Fall back to local sync: preserve pending changes locally in offlineQueue
+      const queueCount = this.offlineQueue.size();
       this.updateState({
-        status: 'needs_attention',
-        errorMessage: err.message || 'Sync failed',
+        status: queueCount > 0 ? 'pending_changes' : 'synced',
+        pendingOpsCount: queueCount,
+        errorMessage: `GDrive sync failed (${err.message || 'remote error'}). Preserved locally.`,
       });
     }
   }
