@@ -149,7 +149,10 @@
     "focusTitle": "Enfoque de Hoy",
     "allCategories": "Todas las Categorías",
     "addItem": "Añadir elemento",
-    "emptyCategory": "No hay elementos en esta categoría todavía. ¡Escribe arriba para añadir uno!"
+    "emptyCategory": "No hay elementos en esta categoría todavía. ¡Escribe arriba para añadir uno!",
+    "sortRecentToOld": "Recientes a antiguos",
+    "sortRecentToOldTooltip": "Las tarjetas están ordenadas cronológicamente: las más recientes aparecen primero",
+    "newestFirst": "Más reciente"
   },
   "timeView": {
     "title": "Calendario",
@@ -510,7 +513,21 @@
     "clearDate": "Quitar Fecha",
     "balanceLabel": "Saldo ($)",
     "assignedToLabel": "Asignado a",
-    "priorityLabel": "Prioridad"
+    "priorityLabel": "Prioridad",
+    "createdBy": "Creado por {name}",
+    "you": "Tú",
+    "justNow": "Recién",
+    "yesterday": "Ayer",
+    "newBadge": "Nuevo"
+  },
+  "welcomeTour": {
+    "quickTour": "Hacer un recorrido rápido",
+    "reopenTour": "Ayuda y Guía",
+    "stepCounter": "Paso {current} de {total}",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "skip": "Saltar Guía",
+    "finish": "¡Entendido!"
   },
   "joinModal": {
     "title": "Invitación a Espacio",

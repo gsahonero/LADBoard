@@ -725,12 +725,15 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                       </span>
                       <span
                         className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                          ct.isDefault
+                          ct.isSpaceCustomized
+                            ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                            : ct.isDefault
                             ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                             : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 border border-indigo-200'
                         }`}
+                        data-testid={`card-type-badge-${ct.id}`}
                       >
-                        {ct.isDefault ? 'Default' : 'Custom'}
+                        {ct.isSpaceCustomized ? 'Customized Default' : ct.isDefault ? 'Default' : 'Custom'}
                       </span>
                     </div>
                     {ct.description && (
@@ -763,7 +766,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                       data-testid={`edit-card-type-${ct.id}`}
                     >
                       <Pencil className="w-3 h-3" />
-                      {ct.isDefault ? 'Customize Copy' : 'Edit Schema'}
+                      {ct.isSpaceCustomized ? 'Edit Space Copy' : ct.isDefault ? 'Customize Copy' : 'Edit Schema'}
                     </button>
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import { CaptureModal } from './components/CaptureModal';
 import { SpaceManagerModal } from './components/SpaceManagerModal';
 import { JoinSpaceModal } from './components/JoinSpaceModal';
 import { ConflictSolverModal } from './components/ConflictSolverModal';
+import { WelcomeTourModal } from './components/WelcomeTourModal';
 import { OnboardingView } from './views/OnboardingView';
 import { HubLandingView } from './views/HubLandingView';
 import { TopicDashboardView } from './views/TopicDashboardView';
@@ -65,6 +66,7 @@ const AppContent: React.FC = () => {
   const [captureDomain, setCaptureDomain] = useState<string | undefined>(undefined);
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [welcomeTourOpen, setWelcomeTourOpen] = useState(false);
 
   // Check if first-run onboarding is needed (bypass if joining an invited space)
   useEffect(() => {
@@ -86,6 +88,19 @@ const AppContent: React.FC = () => {
       }
     }
   }, [isLoading, userRegistry, pendingJoinSpaceId]);
+
+  // Check if modular welcome tour should open for first-time visitors
+  useEffect(() => {
+    if (!isLoading && !showOnboarding) {
+      const tourCompleted = localStorage.getItem('lad_welcome_tour_completed');
+      if (!tourCompleted) {
+        const timer = setTimeout(() => {
+          setWelcomeTourOpen(true);
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoading, showOnboarding]);
 
   const attentionCount = activeAlerts.length + proposals.length;
 
@@ -206,6 +221,7 @@ const AppContent: React.FC = () => {
               onOpenCreateSpace={() => confirmNavigation(() => setActiveTab('create_space'))}
               onOpenSettings={() => confirmNavigation(() => setActiveTab('settings'))}
               onGoToHub={() => confirmNavigation(() => setActiveTab('hub'))}
+              onOpenWelcomeTour={() => setWelcomeTourOpen(true)}
             />
 
             <div className="flex-1 flex max-w-7xl w-full mx-auto">
@@ -272,6 +288,12 @@ const AppContent: React.FC = () => {
 
       {/* Sync Conflict Solver Dialogue */}
       <ConflictSolverModal />
+
+      {/* Modular JSON-Driven Welcome Tour */}
+      <WelcomeTourModal
+        isOpen={welcomeTourOpen}
+        onClose={() => setWelcomeTourOpen(false)}
+      />
     </div>
   );
 };

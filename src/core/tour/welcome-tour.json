@@ -1,0 +1,82 @@
+﻿{
+  "version": "1.0.0",
+  "tourId": "lad-welcome-tour",
+  "defaultLocale": "en",
+  "steps": [
+    {
+      "id": "welcome-intro",
+      "module": "core",
+      "title": "Welcome to LAD Board",
+      "subtitle": "Your Local Autonomous Domain",
+      "description": "LAD Board is a local-first, agent-driven cognitive workspace designed to turn messy life items into structured, ambient knowledge cards. 100% private, offline-capable, and fully in your control.",
+      "targetSelector": null,
+      "placement": "center",
+      "icon": "Sparkles",
+      "highlights": [
+        "Local-First & Offline Capable: All data stays in your browser & devices",
+        "Granular Cloud Sync: Connect Google Drive with non-destructive conflict solving",
+        "Zero-Waste Navigation: Cards flow seamlessly without wasted white space"
+      ]
+    },
+    {
+      "id": "smart-capture",
+      "module": "capture",
+      "title": "Smart Natural Language Capture",
+      "subtitle": "Type naturally, let LAD structure it",
+      "description": "Quickly add thoughts, appointments, balances, and checklists by typing naturally in the capture bar. LAD automatically infers domains, due dates, and custom card types.",
+      "targetSelector": "[data-testid=\"smart-capture-bar\"]",
+      "placement": "bottom",
+      "icon": "Sparkles",
+      "highlights": [
+        "Press Enter to capture in seconds",
+        "NLP slots parse bank names, medical specialties, and dates automatically",
+        "Configurable title wildcards format cards instantly"
+      ]
+    },
+    {
+      "id": "stack-navigation",
+      "module": "board",
+      "title": "Chronological Stacks & Views",
+      "subtitle": "Zero wasted space, sorted recent to old",
+      "description": "Cards are organized into category stacks flowing chronologically from newest to oldest. Switch between Category Stacks and Masonry Flow at any time with no vertical gaps.",
+      "targetSelector": "[data-testid=\"sorting-order-visual-cue\"]",
+      "placement": "bottom",
+      "icon": "Layers",
+      "highlights": [
+        "Recent to Old: Newest cards always appear at the top of each stack",
+        "Dual View Mode: Toggle between Category Stacks and fluid Masonry Flow",
+        "Multilingual Search: Fast, diacritic-insensitive search across all fields"
+      ]
+    },
+    {
+      "id": "spaces-and-collaboration",
+      "module": "collaboration",
+      "title": "Spaces & Collaboration",
+      "subtitle": "Strict identity verification & granular sharing",
+      "description": "Organize your life into dedicated spaces (Personal, Family, Projects). Invite collaborators with verified email authentication and Google Drive folder permissions.",
+      "targetSelector": "[data-testid=\"space-dropdown-btn\"]",
+      "placement": "bottom",
+      "icon": "Users",
+      "highlights": [
+        "Isolate Personal vs Work contexts cleanly",
+        "Invite collaborators with verified email matching",
+        "Interactive Conflict Solver protects everyone's concurrent changes"
+      ]
+    },
+    {
+      "id": "sync-and-offline",
+      "module": "sync",
+      "title": "Local-First Sync Engine",
+      "subtitle": "Always online or offline, never lose a change",
+      "description": "LAD queues all mutations locally in IndexedDB. When online, changes sync with peer-to-peer and cloud storage with Lamport clock causal ordering.",
+      "targetSelector": "[data-testid=\"sync-badge-container\"]",
+      "placement": "bottom",
+      "icon": "Cloud",
+      "highlights": [
+        "Automatic offline queue with instant replay",
+        "Granular delta-file updates (only edited cards sync)",
+        "Zero data overwrites with side-by-side Conflict Solver"
+      ]
+    }
+  ]
+}

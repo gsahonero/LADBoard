@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
-  const { updateObject, deleteObject } = useLAD();
+  const { updateObject, deleteObject, nodes, userRegistry } = useLAD();
   const { t } = useI18n();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -39,6 +39,100 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const checklist: Array<{ id: string; text: string; completed: boolean }> =
     obj.attributes?.checklist || [];
   const followup = obj.attributes?.followup;
+
+  // Resolves creator display name from userRegistry or graph nodes
+  const creatorDisplay = useMemo(() => {
+    const creatorId = obj.created_by || (obj as any).source?.actor;
+    if (!creatorId) return null;
+
+    // Current user
+    const localIdentity = userRegistry?.identities?.[0];
+    if (
+      userRegistry &&
+      (userRegistry.user_id === creatorId ||
+        localIdentity?.subject_id === creatorId ||
+        localIdentity?.email === creatorId ||
+        (localIdentity as any)?.identity_id === creatorId ||
+        creatorId === 'usr_local_me')
+    ) {
+      return t('card.you') || 'You';
+    }
+
+    // Graph user node
+    if (nodes && nodes.length > 0) {
+      const userNode = nodes.find(
+        (n) =>
+          n.type === 'user' &&
+          (n.ref_id === creatorId ||
+            n.node_id === creatorId ||
+            n.node_id === `usr_${creatorId}`)
+      );
+      if (userNode) {
+        return userNode.metadata?.display_name || userNode.metadata?.name || userNode.label;
+      }
+    }
+
+    // Direct email or string (preserve for attribution)
+    if (creatorId.includes('@')) {
+      return creatorId;
+    }
+
+    if (creatorId.startsWith('usr_')) {
+      return creatorId.replace('usr_', '');
+    }
+
+    return creatorId;
+  }, [obj.created_by, (obj as any).source?.actor, userRegistry, nodes, t]);
+
+  // Formats creation date and relative time
+  const createdAtFormatted = useMemo(() => {
+    if (!obj.created_at) return null;
+    try {
+      const date = new Date(obj.created_at);
+      if (isNaN(date.getTime())) return null;
+
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDays = Math.floor(diffHour / 24);
+
+      let relative = '';
+      if (diffSec < 60) {
+        relative = t('card.justNow') || 'Just now';
+      } else if (diffMin < 60) {
+        relative = `${diffMin}m ago`;
+      } else if (diffHour < 24) {
+        relative = `${diffHour}h ago`;
+      } else if (diffDays === 1) {
+        relative = t('card.yesterday') || 'Yesterday';
+      } else if (diffDays < 7) {
+        relative = `${diffDays}d ago`;
+      } else {
+        relative = date.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        });
+      }
+
+      const fullDate = date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      return {
+        relative,
+        fullDate,
+        isVeryRecent: diffMs < 24 * 60 * 60 * 1000,
+      };
+    } catch {
+      return null;
+    }
+  }, [obj.created_at, t]);
 
   // Resolves wildcards (e.g. {bank}, {account_type}, etc.) in card titles displayed on the board
   const displayTitle = useMemo(() => {
@@ -228,6 +322,16 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
               {obj.priority === 'urgent' && (
                 <span className="text-[10px] font-bold px-1.5 py-0.2 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-full">
                   {t('capture.priorities.urgent')}
+                </span>
+              )}
+
+              {createdAtFormatted?.isVeryRecent && !isCompleted && !isArchived && (
+                <span
+                  data-testid={`card-freshness-badge-${obj.object_id}`}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>{t('card.newBadge') || 'New'}</span>
                 </span>
               )}
             </div>
@@ -549,7 +653,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
             )}
           </div>
 
-          {obj.tags.length > 0 && (
+          {obj.tags && obj.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {obj.tags.map((tag) => (
                 <span
@@ -559,6 +663,37 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   #{tag}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Creator & Creation Timestamp Attribution */}
+          {(creatorDisplay || createdAtFormatted) && (
+            <div className="flex items-center justify-between gap-1 text-[10px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100/80 dark:border-slate-800/50">
+              <div className="flex items-center gap-1 min-w-0 truncate">
+                {creatorDisplay && (
+                  <span
+                    className="truncate"
+                    data-testid={`card-creator-${obj.object_id}`}
+                    title={`Created by ${creatorDisplay}`}
+                  >
+                    {t('card.createdBy') || 'Created by'}{' '}
+                    <strong className="font-semibold text-slate-600 dark:text-slate-300">
+                      {creatorDisplay}
+                    </strong>
+                  </span>
+                )}
+              </div>
+              {createdAtFormatted && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <Clock className="w-2.5 h-2.5 text-slate-400" />
+                  <span
+                    data-testid={`card-created-at-${obj.object_id}`}
+                    title={createdAtFormatted.fullDate}
+                  >
+                    {createdAtFormatted.relative}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

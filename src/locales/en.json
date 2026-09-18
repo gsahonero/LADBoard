@@ -149,7 +149,10 @@
     "focusTitle": "Today's Focus",
     "allCategories": "All Categories",
     "addItem": "Add item",
-    "emptyCategory": "No items in this category yet. Type above to add one!"
+    "emptyCategory": "No items in this category yet. Type above to add one!",
+    "sortRecentToOld": "Recent to old",
+    "sortRecentToOldTooltip": "Cards are sorted chronologically: newest created appear first",
+    "newestFirst": "Newest"
   },
   "timeView": {
     "title": "Timeline",
@@ -510,7 +513,21 @@
     "clearDate": "Clear Date",
     "balanceLabel": "Balance ($)",
     "assignedToLabel": "Assigned to",
-    "priorityLabel": "Priority"
+    "priorityLabel": "Priority",
+    "createdBy": "Created by {name}",
+    "you": "You",
+    "justNow": "Just now",
+    "yesterday": "Yesterday",
+    "newBadge": "New"
+  },
+  "welcomeTour": {
+    "quickTour": "Take a quick tour",
+    "reopenTour": "Help & Tour",
+    "stepCounter": "Step {current} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip Tour",
+    "finish": "Got it!"
   },
   "joinModal": {
     "title": "Space Invitation",

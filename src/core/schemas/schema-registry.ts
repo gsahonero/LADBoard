@@ -10,6 +10,7 @@ export class SchemaRegistry {
   private categories: Map<string, LADCategoryDefinition> = new Map();
   private defaultCardTypes: Map<string, LADCardTypeDefinition> = new Map();
   private customCardTypes: Map<string, LADCardTypeDefinition> = new Map();
+  private spaceCustomizedDefaults: Map<string, LADCardTypeDefinition> = new Map();
 
   constructor(customTypes: LADCardTypeDefinition[] = []) {
     // Seed default categories
@@ -28,8 +29,22 @@ export class SchemaRegistry {
 
   loadCustomCardTypes(customTypes: LADCardTypeDefinition[]) {
     this.customCardTypes.clear();
+    this.spaceCustomizedDefaults.clear();
+    if (!customTypes || !Array.isArray(customTypes)) return;
+
     for (const ct of customTypes) {
-      if (!this.defaultCardTypes.has(ct.id)) {
+      if (!ct) continue;
+      const targetDefaultId = ct.overridesDefaultId || (this.defaultCardTypes.has(ct.id) ? ct.id : null);
+
+      if (targetDefaultId && this.defaultCardTypes.has(targetDefaultId)) {
+        this.spaceCustomizedDefaults.set(targetDefaultId, {
+          ...ct,
+          id: targetDefaultId,
+          overridesDefaultId: targetDefaultId,
+          isDefault: true,
+          isSpaceCustomized: true,
+        });
+      } else {
         this.customCardTypes.set(ct.id, { ...ct, isDefault: false });
       }
     }
@@ -44,8 +59,11 @@ export class SchemaRegistry {
   }
 
   getAllCardTypes(): LADCardTypeDefinition[] {
+    const defaults = Array.from(this.defaultCardTypes.values()).map((def) => {
+      return this.spaceCustomizedDefaults.get(def.id) || def;
+    });
     return [
-      ...Array.from(this.defaultCardTypes.values()),
+      ...defaults,
       ...Array.from(this.customCardTypes.values()),
     ];
   }
@@ -55,7 +73,50 @@ export class SchemaRegistry {
   }
 
   getCardType(id: string): LADCardTypeDefinition | undefined {
-    return this.defaultCardTypes.get(id) || this.customCardTypes.get(id);
+    return (
+      this.spaceCustomizedDefaults.get(id) ||
+      this.customCardTypes.get(id) ||
+      this.defaultCardTypes.get(id)
+    );
+  }
+
+  /**
+   * Customizes the space's copy of a default card type.
+   * Does not mutate global default immutability, but provides a space override.
+   */
+  customizeDefaultCardType(
+    defaultId: string,
+    definition: Partial<LADCardTypeDefinition>
+  ): LADCardTypeDefinition {
+    const original = this.defaultCardTypes.get(defaultId);
+    if (!original) {
+      throw new Error(`Default card type "${defaultId}" not found`);
+    }
+    const current = this.spaceCustomizedDefaults.get(defaultId) || original;
+    const updated: LADCardTypeDefinition = {
+      ...current,
+      ...definition,
+      id: defaultId,
+      overridesDefaultId: defaultId,
+      isDefault: true,
+      isSpaceCustomized: true,
+    };
+    this.spaceCustomizedDefaults.set(defaultId, updated);
+    return updated;
+  }
+
+  /**
+   * Resets a default card type to its original system defaults for this space.
+   */
+  resetDefaultCardType(defaultId: string): boolean {
+    return this.spaceCustomizedDefaults.delete(defaultId);
+  }
+
+  /**
+   * Checks if a default card type has been customized for this space.
+   */
+  isDefaultCustomized(defaultId: string): boolean {
+    return this.spaceCustomizedDefaults.has(defaultId);
   }
 
   addCustomCardType(definition: LADCardTypeDefinition): LADCardTypeDefinition {
@@ -72,7 +133,7 @@ export class SchemaRegistry {
 
   updateCustomCardType(id: string, definition: Partial<LADCardTypeDefinition>): LADCardTypeDefinition {
     if (this.defaultCardTypes.has(id)) {
-      throw new Error(`Cannot modify immutable default card type "${id}"`);
+      return this.customizeDefaultCardType(id, definition);
     }
     const existing = this.customCardTypes.get(id);
     if (!existing) {
@@ -90,22 +151,20 @@ export class SchemaRegistry {
 
   deleteCustomCardType(id: string): boolean {
     if (this.defaultCardTypes.has(id)) {
-      throw new Error(`Cannot delete immutable default card type "${id}"`);
+      throw new Error(`Cannot delete default card type "${id}"`);
     }
     return this.customCardTypes.delete(id);
   }
 
   exportCustomCardTypes(): LADCardTypeDefinition[] {
-    return Array.from(this.customCardTypes.values());
+    return [
+      ...Array.from(this.customCardTypes.values()),
+      ...Array.from(this.spaceCustomizedDefaults.values()),
+    ];
   }
 
   importCustomCardTypes(types: LADCardTypeDefinition[]): void {
-    if (!types || !Array.isArray(types)) return;
-    for (const type of types) {
-      if (type && type.id) {
-        this.customCardTypes.set(type.id, { ...type, isDefault: false });
-      }
-    }
+    this.loadCustomCardTypes(types);
   }
 
   /**

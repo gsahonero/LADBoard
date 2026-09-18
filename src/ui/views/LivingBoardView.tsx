@@ -29,6 +29,7 @@ import {
   Columns3,
   LayoutGrid,
   Plus,
+  Clock,
 } from 'lucide-react';
 
 export const LivingBoardView: React.FC = () => {
@@ -107,8 +108,14 @@ export const LivingBoardView: React.FC = () => {
 
   const filteredObjects = useMemo(() => {
     if (showArchive) {
-      if (!archiveSearchQuery.trim()) return archivedObjects;
-      return fuzzyFilterObjects(archivedObjects, archiveSearchQuery);
+      const base = !archiveSearchQuery.trim()
+        ? archivedObjects
+        : fuzzyFilterObjects(archivedObjects, archiveSearchQuery);
+      return [...base].sort(
+        (a, b) =>
+          new Date(b.created_at || b.updated_at || 0).getTime() -
+          new Date(a.created_at || a.updated_at || 0).getTime()
+      );
     }
 
     let result = activeObjects;
@@ -121,7 +128,11 @@ export const LivingBoardView: React.FC = () => {
     if (searchQuery.trim()) {
       result = fuzzyFilterObjects(result, searchQuery);
     }
-    return result;
+    return [...result].sort(
+      (a, b) =>
+        new Date(b.created_at || b.updated_at || 0).getTime() -
+        new Date(a.created_at || a.updated_at || 0).getTime()
+    );
   }, [showArchive, archivedObjects, activeObjects, archiveSearchQuery, selectedDomain, dateFilter, searchQuery]);
 
   const visibleStacks = useMemo(() => {
@@ -315,6 +326,17 @@ export const LivingBoardView: React.FC = () => {
                 <span className="hidden sm:inline">Masonry</span>
               </button>
             </div>
+
+            {/* Sorting Order Visual Cue */}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs select-none shrink-0"
+              data-testid="sorting-order-visual-cue"
+              title={t('boardView.sortRecentToOldTooltip') || 'Cards are sorted chronologically: newest created appear first'}
+            >
+              <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span>{t('boardView.sortRecentToOld') || 'Recent to old'}</span>
+              <span className="text-indigo-500 font-bold text-xs leading-none">↓</span>
+            </div>
           </>
         ) : (
           /* Archive Search Bar */
@@ -430,6 +452,16 @@ export const LivingBoardView: React.FC = () => {
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                       {cardsInStack.length}
                     </span>
+                    {cardsInStack.length > 0 && (
+                      <span
+                        className="text-[10px] text-slate-400 font-medium hidden sm:inline-flex items-center gap-0.5"
+                        data-testid={`stack-sort-cue-${cat.id}`}
+                        title="Sorted recent to old"
+                      >
+                        <span>{t('boardView.newestFirst') || 'Newest'}</span>
+                        <span className="text-indigo-500 font-bold">↓</span>
+                      </span>
+                    )}
                   </div>
                   {selectedDomain === 'all' && (
                     <button

@@ -21,9 +21,9 @@ import {
   Check,
   Layers,
   AlertCircle,
-  Copy,
-  Lock,
   Loader2,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 
 interface CardTypeEditorModalProps {
@@ -45,7 +45,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const registry = SchemaRegistry.getInstance();
 
   const isDefault = cardType?.isDefault ?? false;
+  const isSpaceCustomized = Boolean(
+    cardType && (cardType.isSpaceCustomized || registry.isDefaultCustomized(cardType.id))
+  );
   const isEditing = Boolean(cardType && !isDefault);
+  const isCustomizingDefault = Boolean(cardType && isDefault);
 
   // Form State
   const [name, setName] = useState('');
@@ -159,9 +163,30 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
     setOptionsRawMap((prev) => ({ ...prev, [fieldIdx]: updatedOptions.join(', ') }));
   };
 
-  const handleDuplicateAsCustom = () => {
-    setName(`${cardType?.name || 'Card'} (Custom)`);
-    setCategory(cardType?.category || defaultCategory);
+  const handleResetToDefault = async () => {
+    if (!cardType || !isCustomizingDefault) return;
+    setIsSaving(true);
+    try {
+      registry.resetDefaultCardType(cardType.id);
+      if (activeManifest) {
+        const exportedCustom = registry.exportCustomCardTypes();
+        await updateSpaceIdentity(activeManifest.space_id, {
+          settings: {
+            ...(activeManifest.settings || {}),
+            custom_card_types: exportedCustom,
+          },
+        });
+      }
+      const resetDef = registry.getCardType(cardType.id);
+      if (resetDef) {
+        onSaved?.(resetDef);
+      }
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset card type');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -181,7 +206,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
     setError(null);
 
     try {
-      const id = isEditing && cardType
+      const isSpaceCustomizing = Boolean(isDefault && cardType);
+
+      const id = isSpaceCustomizing && cardType
+        ? cardType.id
+        : isEditing && cardType
         ? cardType.id
         : `custom.${category}.${name.toLowerCase().replace(/[^a-z0-9_]/g, '_')}_${Date.now()}`;
 
@@ -201,7 +230,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         category,
         name: name.trim(),
         description: description.trim(),
-        isDefault: false,
+        isDefault: isSpaceCustomizing ? true : false,
+        isSpaceCustomized: isSpaceCustomizing ? true : false,
+        overridesDefaultId: isSpaceCustomizing && cardType ? cardType.id : undefined,
         fields,
         titleConfig,
         nlp: {
@@ -212,7 +243,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         },
       };
 
-      if (isEditing) {
+      if (isSpaceCustomizing) {
+        registry.customizeDefaultCardType(id, definition);
+      } else if (isEditing) {
         registry.updateCustomCardType(id, definition);
       } else {
         registry.addCustomCardType(definition);
@@ -257,14 +290,14 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                   {isDefault && cardType
-                    ? `Default Card Schema: ${cardType.name}`
+                    ? `Customize Space Copy: ${cardType.name}`
                     : isEditing && cardType
                     ? `Edit Card Type: ${cardType.name}`
                     : 'Create New Card Type'}
                 </h2>
                 <p className="text-[11px] text-slate-500">
                   {isDefault
-                    ? 'Default card types are immutable core baselines. Duplicate to create a customizable version.'
+                    ? "Customize fields, keywords, and title patterns for this space's copy of this default card."
                     : 'Define custom card fields, slot extractors, and NLP keywords for this category.'}
                 </p>
               </div>
@@ -288,21 +321,27 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
             )}
 
             {isDefault && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <div
+                className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-900 dark:text-indigo-200"
+                data-testid="space-copy-customization-banner"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span>
-                    This built-in default card type cannot be directly modified to preserve system stability.
+                    <strong>Customizing Space Copy:</strong> Changes apply to this space without modifying immutable global defaults.
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDuplicateAsCustom}
-                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 shadow-xs"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Customize Copy</span>
-                </button>
+                {isSpaceCustomized && (
+                  <button
+                    type="button"
+                    onClick={handleResetToDefault}
+                    className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 rounded-lg font-semibold text-[11px] border border-slate-200 dark:border-slate-700 flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                    data-testid="reset-to-default-btn"
+                  >
+                    <RotateCcw className="w-3 h-3 text-rose-500" />
+                    <span>Reset to System Default</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -314,11 +353,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  disabled={isDefault}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Pet Vaccination, Vehicle Maintenance"
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                   data-testid="card-type-name-input"
                 />
               </div>
@@ -328,10 +366,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                   Category
                 </label>
                 <select
-                  disabled={isDefault}
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
                 >
                   {registry.getAllCategories().map((cat) => (
                     <option key={cat.id} value={cat.id}>
@@ -347,11 +384,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  disabled={isDefault}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Brief description of what this card tracks..."
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -361,11 +397,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  disabled={isDefault}
                   value={keywordsStr}
                   onChange={(e) => setKeywordsStr(e.target.value)}
                   placeholder="e.g. vaccine, pet, vet, booster"
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -376,10 +411,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 <input
                   type="number"
                   min="1"
-                  disabled={isDefault}
                   value={autoArchiveDays}
                   onChange={(e) => setAutoArchiveDays(parseInt(e.target.value) || 7)}
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
+                  className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
             </div>
@@ -392,13 +426,12 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
-                  disabled={isDefault}
                   onClick={() => setTitleMode('input_text')}
                   className={`p-2.5 rounded-xl border text-left transition-all ${
                     titleMode === 'input_text'
                       ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
                       : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                  } disabled:opacity-60 cursor-pointer`}
+                  } cursor-pointer`}
                   data-testid="title-mode-input-text"
                 >
                   <div className="text-xs font-bold mb-0.5">From Input Text</div>
@@ -409,13 +442,12 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
 
                 <button
                   type="button"
-                  disabled={isDefault}
                   onClick={() => setTitleMode('fixed')}
                   className={`p-2.5 rounded-xl border text-left transition-all ${
                     titleMode === 'fixed'
                       ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
                       : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                  } disabled:opacity-60 cursor-pointer`}
+                  } cursor-pointer`}
                   data-testid="title-mode-fixed"
                 >
                   <div className="text-xs font-bold mb-0.5">Fixed Title</div>
@@ -426,13 +458,12 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
 
                 <button
                   type="button"
-                  disabled={isDefault}
                   onClick={() => setTitleMode('template')}
                   className={`p-2.5 rounded-xl border text-left transition-all ${
                     titleMode === 'template'
                       ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
                       : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                  } disabled:opacity-60 cursor-pointer`}
+                  } cursor-pointer`}
                   data-testid="title-mode-template"
                 >
                   <div className="text-xs font-bold mb-0.5">Field Template</div>
@@ -449,11 +480,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    disabled={isDefault}
                     value={fixedTitle}
                     onChange={(e) => setFixedTitle(e.target.value)}
                     placeholder="e.g. Saldo, Saldo {bank}, Daily Log"
-                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
                     data-testid="card-type-fixed-title-input"
                   />
                   <div className="flex flex-wrap items-center gap-1">
@@ -462,7 +492,6 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                       <button
                         key={f.key}
                         type="button"
-                        disabled={isDefault}
                         onClick={() => setFixedTitle((prev) => `${prev} {${f.key}}`.trim())}
                         className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-lad-50 dark:hover:bg-lad-950/40 border border-slate-200 dark:border-slate-700 cursor-pointer"
                         data-testid={`insert-fixed-token-${f.key}`}
@@ -481,11 +510,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    disabled={isDefault}
                     value={titleTemplate}
                     onChange={(e) => setTitleTemplate(e.target.value)}
                     placeholder="e.g. {bank} Balance, {specialty} Appointment"
-                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium font-mono"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium font-mono"
                     data-testid="card-type-template-input"
                   />
                   <div className="flex flex-wrap items-center gap-1">
@@ -494,7 +522,6 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                       <button
                         key={f.key}
                         type="button"
-                        disabled={isDefault}
                         onClick={() => setTitleTemplate((prev) => `${prev} {${f.key}}`.trim())}
                         className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-lad-50 dark:hover:bg-lad-950/40 border border-slate-200 dark:border-slate-700 cursor-pointer"
                       >
@@ -512,17 +539,15 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                   Card Field Definitions ({fields.length})
                 </span>
-                {!isDefault && (
-                  <button
-                    type="button"
-                    onClick={handleAddField}
-                    className="text-xs font-semibold text-lad-600 hover:text-lad-700 flex items-center gap-1 cursor-pointer"
-                    data-testid="add-field-button"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Field</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleAddField}
+                  className="text-xs font-semibold text-lad-600 hover:text-lad-700 flex items-center gap-1 cursor-pointer"
+                  data-testid="add-field-button"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Field</span>
+                </button>
               </div>
 
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -538,10 +563,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          disabled={isDefault}
                           value={field.label}
                           onChange={(e) => handleFieldChange(idx, { label: e.target.value })}
-                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white disabled:opacity-60"
+                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                         />
                       </div>
 
@@ -551,10 +575,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          disabled={isDefault}
                           value={field.key}
                           onChange={(e) => handleFieldChange(idx, { key: e.target.value })}
-                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono disabled:opacity-60"
+                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
                         />
                       </div>
 
@@ -564,12 +587,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                             Data Type
                           </label>
                           <select
-                            disabled={isDefault}
                             value={field.type}
                             onChange={(e) =>
                               handleFieldChange(idx, { type: e.target.value as LADFieldType })
                             }
-                            className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white disabled:opacity-60"
+                            className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                           >
                             <option value="text">Text</option>
                             <option value="number">Number</option>
@@ -582,11 +604,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                           </select>
                         </div>
 
-                        {!isDefault && fields.length > 1 && (
+                        {fields.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveField(idx)}
-                            className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                             title="Remove field"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -610,7 +632,6 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                         </div>
                         <input
                           type="text"
-                          disabled={isDefault}
                           value={optionsRawMap[idx] !== undefined ? optionsRawMap[idx] : (field.options?.join(', ') || '')}
                           placeholder="e.g. Checking Account, Savings Account, Credit Card"
                           onChange={(e) => handleOptionsRawChange(idx, e.target.value)}
@@ -623,7 +644,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                               }
                             }
                           }}
-                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white disabled:opacity-60"
+                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                         />
                         {/* Interactive Pill Badges showing parsed options with spaces preserved */}
                         {field.options && field.options.length > 0 && (
@@ -634,16 +655,14 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                                 className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-lad-50 text-lad-700 border border-lad-200/60 dark:bg-lad-950/40 dark:text-lad-300 dark:border-lad-800"
                               >
                                 <span>{opt}</span>
-                                {!isDefault && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveOptionBadge(idx, opt)}
-                                    className="hover:text-rose-500 rounded cursor-pointer transition-colors ml-0.5"
-                                    title={`Remove "${opt}"`}
-                                  >
-                                    <X className="w-2.5 h-2.5" />
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveOptionBadge(idx, opt)}
+                                  className="hover:text-rose-500 rounded cursor-pointer transition-colors ml-0.5"
+                                  title={`Remove "${opt}"`}
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
                               </span>
                             ))}
                           </div>
@@ -674,7 +693,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
               {isSaving
                 ? 'Syncing schema with space...'
                 : isDefault
-                ? 'Viewing default schema'
+                ? "Space-customized copy will sync with this space."
                 : 'Custom schema will sync with this space.'}
             </span>
             <div className="flex items-center gap-2">
@@ -682,36 +701,34 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 Close
               </button>
-              {!isDefault && (
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  aria-busy={isSaving}
-                  className={`px-4 py-2 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all ${
-                    isSaving
-                      ? 'bg-lad-400 dark:bg-lad-800 cursor-not-allowed opacity-80'
-                      : 'bg-lad-600 hover:bg-lad-700 cursor-pointer active:scale-95'
-                  }`}
-                  data-testid="save-card-type-button"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" data-testid="save-card-type-spinner" />
-                      <span>Saving Card Type...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Save Card Type</span>
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                aria-busy={isSaving}
+                className={`px-4 py-2 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all ${
+                  isSaving
+                    ? 'bg-lad-400 dark:bg-lad-800 cursor-not-allowed opacity-80'
+                    : 'bg-lad-600 hover:bg-lad-700 cursor-pointer active:scale-95'
+                }`}
+                data-testid="save-card-type-button"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" data-testid="save-card-type-spinner" />
+                    <span>Saving Card Type...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{isDefault ? 'Save Space Copy' : isEditing ? 'Save Changes' : 'Save Card Type'}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </motion.div>
