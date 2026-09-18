@@ -389,7 +389,15 @@ export const SmartCaptureBar: React.FC = () => {
                       setHasModifiedDetails(true);
                       const types = registry.getCardTypesForCategory(newDomain);
                       if (types.length > 0) {
-                        setOverrideCardTypeId(types[0].id);
+                        const newType = types[0];
+                        setOverrideCardTypeId(newType.id);
+                        const updatedTitle = CaptureParser.generateTitle(
+                          input,
+                          inferred?.extractedActions || [],
+                          newType,
+                          fieldOverrides
+                        );
+                        setOverrideTitle(updatedTitle);
                       }
                     }}
                     className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
@@ -410,8 +418,19 @@ export const SmartCaptureBar: React.FC = () => {
                   <select
                     value={overrideCardTypeId || ''}
                     onChange={(e) => {
-                      setOverrideCardTypeId(e.target.value);
+                      const newId = e.target.value;
+                      setOverrideCardTypeId(newId);
                       setHasModifiedDetails(true);
+                      const newType = registry.getCardType(newId);
+                      if (newType) {
+                        const updatedTitle = CaptureParser.generateTitle(
+                          input,
+                          inferred?.extractedActions || [],
+                          newType,
+                          fieldOverrides
+                        );
+                        setOverrideTitle(updatedTitle);
+                      }
                     }}
                     className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
                     data-testid="finer-details-cardtype-select"

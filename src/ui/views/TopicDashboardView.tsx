@@ -207,7 +207,8 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
           <motion.div
             variants={itemVariants}
             layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start"
+            data-testid="topic-dashboard-grid"
           >
             {filteredObjects.map((obj) => (
               <motion.div

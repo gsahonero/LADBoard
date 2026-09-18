@@ -9,6 +9,8 @@ import {
   LADCardTypeDefinition,
   LADFieldDefinition,
   LADFieldType,
+  LADCardTitleMode,
+  LADCardTitleConfig,
 } from '../../core/schemas/card-types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import { useLAD } from '../context/LADContext';
@@ -51,6 +53,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [description, setDescription] = useState('');
   const [keywordsStr, setKeywordsStr] = useState('');
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(7);
+  const [titleMode, setTitleMode] = useState<LADCardTitleMode>('input_text');
+  const [fixedTitle, setFixedTitle] = useState('');
+  const [titleTemplate, setTitleTemplate] = useState('');
   const [fields, setFields] = useState<LADFieldDefinition[]>([]);
   const [optionsRawMap, setOptionsRawMap] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +70,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setDescription(cardType.description || '');
       setKeywordsStr(cardType.nlp?.keywords?.join(', ') || '');
       setAutoArchiveDays(cardType.lifecycle?.autoArchiveDays || 7);
+      setTitleMode(cardType.titleConfig?.mode || 'input_text');
+      setFixedTitle(cardType.titleConfig?.fixedTitle || '');
+      setTitleTemplate(cardType.titleConfig?.template || '');
       const initialFields = cardType.fields.map((f) => ({
         ...f,
         options: f.options ? [...f.options] : undefined,
@@ -83,6 +91,9 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setDescription('');
       setKeywordsStr('');
       setAutoArchiveDays(7);
+      setTitleMode('input_text');
+      setFixedTitle('');
+      setTitleTemplate('');
       setFields([
         { key: 'title', label: 'Title', type: 'text', required: true },
         { key: 'comments', label: 'Comments / Notes', type: 'text', required: false },
@@ -179,6 +190,12 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         .map((k) => k.trim().toLowerCase())
         .filter(Boolean);
 
+      const titleConfig: LADCardTitleConfig = {
+        mode: titleMode,
+        ...(titleMode === 'fixed' ? { fixedTitle: fixedTitle.trim() } : {}),
+        ...(titleMode === 'template' ? { template: titleTemplate.trim() } : {}),
+      };
+
       const definition: LADCardTypeDefinition = {
         id,
         category,
@@ -186,6 +203,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         description: description.trim(),
         isDefault: false,
         fields,
+        titleConfig,
         nlp: {
           keywords: keywords.length > 0 ? keywords : [name.toLowerCase()],
         },
@@ -364,6 +382,113 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                   className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
                 />
               </div>
+            </div>
+
+            {/* Card Title Behavior */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-title-behavior-section">
+              <label className="text-[10px] font-bold uppercase text-slate-400 block">
+                Card Title Behavior
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  disabled={isDefault}
+                  onClick={() => setTitleMode('input_text')}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    titleMode === 'input_text'
+                      ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  } disabled:opacity-60 cursor-pointer`}
+                  data-testid="title-mode-input-text"
+                >
+                  <div className="text-xs font-bold mb-0.5">From Input Text</div>
+                  <div className="text-[10px] text-slate-400 leading-tight">
+                    Uses the text written in the capture bar.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDefault}
+                  onClick={() => setTitleMode('fixed')}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    titleMode === 'fixed'
+                      ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  } disabled:opacity-60 cursor-pointer`}
+                  data-testid="title-mode-fixed"
+                >
+                  <div className="text-xs font-bold mb-0.5">Fixed Title</div>
+                  <div className="text-[10px] text-slate-400 leading-tight">
+                    Always sets the exact same title (e.g. &quot;Saldo&quot;).
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDefault}
+                  onClick={() => setTitleMode('template')}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    titleMode === 'template'
+                      ? 'border-lad-500 bg-lad-50/50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 ring-1 ring-lad-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  } disabled:opacity-60 cursor-pointer`}
+                  data-testid="title-mode-template"
+                >
+                  <div className="text-xs font-bold mb-0.5">Field Template</div>
+                  <div className="text-[10px] text-slate-400 leading-tight">
+                    Interpolates fields into title (e.g. &quot;&#123;bank&#125; Balance&quot;).
+                  </div>
+                </button>
+              </div>
+
+              {titleMode === 'fixed' && (
+                <div className="pt-1">
+                  <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">
+                    Fixed Title Text
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isDefault}
+                    value={fixedTitle}
+                    onChange={(e) => setFixedTitle(e.target.value)}
+                    placeholder="e.g. Saldo, Daily Log, Account Summary"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium"
+                    data-testid="card-type-fixed-title-input"
+                  />
+                </div>
+              )}
+
+              {titleMode === 'template' && (
+                <div className="pt-1 space-y-1.5">
+                  <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">
+                    Title Template Pattern
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isDefault}
+                    value={titleTemplate}
+                    onChange={(e) => setTitleTemplate(e.target.value)}
+                    placeholder="e.g. {bank} Balance, {specialty} Appointment"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium font-mono"
+                    data-testid="card-type-template-input"
+                  />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-[9px] text-slate-400">Insert field token:</span>
+                    {fields.map((f) => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        disabled={isDefault}
+                        onClick={() => setTitleTemplate((prev) => `${prev} {${f.key}}`.trim())}
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-lad-50 dark:hover:bg-lad-950/40 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                      >
+                        &#123;{f.key}&#125;
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Field Schema Builder */}

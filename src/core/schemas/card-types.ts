@@ -57,6 +57,14 @@ export interface LADCardNLPConfig {
   slotPatterns?: Record<string, string[]>; // regex patterns for extracting field values
 }
 
+export type LADCardTitleMode = 'input_text' | 'fixed' | 'template';
+
+export interface LADCardTitleConfig {
+  mode: LADCardTitleMode;
+  fixedTitle?: string; // If mode is 'fixed' (e.g. "Saldo", "Account Balance")
+  template?: string; // If mode is 'template' (e.g. "{bank} Balance", "{specialty} Appointment")
+}
+
 export interface LADCardTypeDefinition {
   id: string; // e.g. 'finances.account_balance', 'shopping.groceries_buying'
   category: string; // 'finances', 'shopping', 'health', 'home', 'documents', 'projects', 'general'
@@ -65,6 +73,7 @@ export interface LADCardTypeDefinition {
   icon?: string;
   isDefault?: boolean; // Immutable system default vs space custom type
   fields: LADFieldDefinition[];
+  titleConfig?: LADCardTitleConfig; // Configurable title behavior
   nlp?: LADCardNLPConfig;
   lifecycle?: LADCardLifecycleConfig;
 }

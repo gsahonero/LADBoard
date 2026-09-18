@@ -666,6 +666,31 @@ export class CaptureParser {
     cardType?: LADCardTypeDefinition,
     fields?: Record<string, any>
   ): string {
+    // 1. Configurable title behavior takes precedence if configured on the card type
+    if (cardType?.titleConfig) {
+      const { mode, fixedTitle, template } = cardType.titleConfig;
+      if (mode === 'fixed') {
+        return fixedTitle?.trim() || cardType.name;
+      }
+      if (mode === 'input_text') {
+        return text.trim();
+      }
+      if (mode === 'template' && template) {
+        let interpolated = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
+          const val = fields?.[key];
+          if (val !== undefined && val !== null && String(val).trim() !== '') {
+            return String(val).trim();
+          }
+          return '';
+        });
+        interpolated = interpolated.replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').trim();
+        if (interpolated.length > 0) {
+          return interpolated;
+        }
+        return cardType.name;
+      }
+    }
+
     // Schema-tailored smart titles
     if (cardType?.id === 'finances.account_balance' && fields?.bank) {
       const typeLabel = fields.account_type ? ` ${fields.account_type}` : '';

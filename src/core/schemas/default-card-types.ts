@@ -119,6 +119,10 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     nlp: {
       keywords: ['balance', 'saldo', 'account', 'cuenta', 'checking', 'savings', 'corriente', 'ahorros', 'bank', 'banco'],
     },
+    titleConfig: {
+      mode: 'template',
+      template: '{bank} Balance',
+    },
     lifecycle: {
       autoArchiveDays: 7,
       hasFollowup: false,
@@ -171,6 +175,9 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     ],
     nlp: {
       keywords: ['groceries', 'supermarket', 'supermercado', 'buy', 'comprar', 'shopping', 'despensa', 'mercado'],
+    },
+    titleConfig: {
+      mode: 'input_text',
     },
     lifecycle: {
       autoArchiveDays: 14,
@@ -256,6 +263,10 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     nlp: {
       keywords: ['appointment', 'doctor', 'médico', 'dentist', 'dentista', 'cita', 'consulta', 'consulta médica', 'cita médica'],
     },
+    titleConfig: {
+      mode: 'template',
+      template: '{specialty} Appointment',
+    },
     lifecycle: {
       hasFollowup: true,
       onItsWayActions: [
@@ -299,6 +310,9 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     ],
     nlp: {
       keywords: ['note', 'nota', 'idea', 'remember', 'recordar'],
+    },
+    titleConfig: {
+      mode: 'input_text',
     },
     lifecycle: {
       autoArchiveDays: 14,
