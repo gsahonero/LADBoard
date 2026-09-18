@@ -11,6 +11,7 @@ import { Navigation, ActiveTab } from './components/Navigation';
 import { CaptureModal } from './components/CaptureModal';
 import { SpaceManagerModal } from './components/SpaceManagerModal';
 import { JoinSpaceModal } from './components/JoinSpaceModal';
+import { ConflictSolverModal } from './components/ConflictSolverModal';
 import { OnboardingView } from './views/OnboardingView';
 import { HubLandingView } from './views/HubLandingView';
 import { TopicDashboardView } from './views/TopicDashboardView';
@@ -268,6 +269,9 @@ const AppContent: React.FC = () => {
 
       {/* Join Space Modal (opens when URL has ?join=spc_... or pending invite) */}
       <JoinSpaceModal />
+
+      {/* Sync Conflict Solver Dialogue */}
+      <ConflictSolverModal />
     </div>
   );
 };

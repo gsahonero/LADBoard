@@ -2,11 +2,12 @@
  * People View — Space Members, Interpersonal Relationships, and Invitations
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
 import { Users, UserPlus, Check, Mail, Shield, Crown, RefreshCw, AlertCircle, Loader2, UserMinus, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { LADGraphNode } from '../../core/standard/types';
 
 export const PeopleView: React.FC = () => {
   const { nodes, inviteMember, removeMember, activeManifest, userRegistry, authService } = useLAD();
@@ -23,7 +24,37 @@ export const PeopleView: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [warningMsg, setWarningMsg] = useState('');
 
-  const userNodes = nodes.filter((n) => n.type === 'user');
+  // Deduplicate user nodes by normalized email to prevent any transient duplicate display
+  const userNodes = useMemo(() => {
+    const rawUsers = nodes.filter((n) => n.type === 'user');
+    const byEmail = new Map<string, LADGraphNode[]>();
+    const withoutEmail: LADGraphNode[] = [];
+
+    for (const u of rawUsers) {
+      const email = (u.metadata?.email || (u.label.includes('@') ? u.label : '')).trim().toLowerCase();
+      if (!email || email === 'user@ladboard.local') {
+        withoutEmail.push(u);
+        continue;
+      }
+      if (!byEmail.has(email)) byEmail.set(email, []);
+      byEmail.get(email)!.push(u);
+    }
+
+    const deduped: LADGraphNode[] = [...withoutEmail];
+    for (const [, list] of byEmail.entries()) {
+      if (list.length === 1) {
+        deduped.push(list[0]);
+        continue;
+      }
+      // Pick canonical node: active status first, then non-invited ref_id, then node with most metadata
+      const activeNode = list.find((n) => n.metadata?.status === 'active');
+      const nonInvited = list.find((n) => !n.ref_id?.startsWith('usr_invited_') && !n.node_id.includes('invited'));
+      const canonical = activeNode || nonInvited || list[0];
+      deduped.push(canonical);
+    }
+
+    return deduped;
+  }, [nodes]);
 
   const handleRemoveUser = async (nodeId: string, name: string, email?: string) => {
     if (removingId) return;
@@ -255,9 +286,9 @@ export const PeopleView: React.FC = () => {
                 (user.label && !user.label.includes('@') && user.label !== 'Current User' && user.label !== 'Owner'
                   ? user.label
                   : 'You');
-            } else {
-              // For invited or other collaborators:
-              // Strictly prioritize the entered name (invited_name or metadata.name or clean label)
+            } else if (isInvited) {
+              // For pending invited collaborators who have not yet accepted:
+              // Strictly prioritize the entered invitation name
               const candidate =
                 user.metadata?.invited_name ||
                 (user.metadata?.name && user.metadata.name !== 'Current User' && user.metadata.name !== 'Owner'
@@ -270,7 +301,29 @@ export const PeopleView: React.FC = () => {
               if (candidate && candidate.trim()) {
                 userName = candidate.trim();
               } else if (userEmail) {
-                // If only email was provided (e.g. sarah.connor@gmail.com), format a clean name: Sarah Connor
+                const prefix = userEmail.split('@')[0];
+                const parts = prefix.split(/[._-]/).filter(Boolean);
+                userName =
+                  parts.length > 0
+                    ? parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+                    : prefix;
+              } else {
+                userName = user.label || 'Collaborator';
+              }
+            } else {
+              // For active/joined members: their verified active name takes top priority
+              const candidate =
+                (user.label && !user.label.includes('@') && user.label !== 'Current User' && user.label !== 'Owner'
+                  ? user.label
+                  : undefined) ||
+                (user.metadata?.name && user.metadata.name !== 'Current User' && user.metadata.name !== 'Owner'
+                  ? user.metadata.name
+                  : undefined) ||
+                user.metadata?.invited_name;
+
+              if (candidate && candidate.trim()) {
+                userName = candidate.trim();
+              } else if (userEmail) {
                 const prefix = userEmail.split('@')[0];
                 const parts = prefix.split(/[._-]/).filter(Boolean);
                 userName =
@@ -305,8 +358,13 @@ export const PeopleView: React.FC = () => {
                     {initials}
                   </div>
                   <div className="space-y-0.5 min-w-0">
-                    <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                       <span className="truncate">{userName}</span>
+                      {!isInvited && user.metadata?.invited_name && user.metadata.invited_name.trim().toLowerCase() !== userName.trim().toLowerCase() && (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">
+                          {t('peopleView.invitedAs', { name: user.metadata.invited_name })}
+                        </span>
+                      )}
                       {role === 'owner' && (
                         <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold border border-blue-200/50 flex items-center gap-1 shrink-0">
                           <Crown className="w-2.5 h-2.5 text-amber-500" />
@@ -347,8 +405,8 @@ export const PeopleView: React.FC = () => {
                     )
                   )}
 
-                  {/* Reinvite Button for invited members or non-owner collaborators with email */}
-                  {!isCurrentUser && userEmail && (
+                  {/* Reinvite Button only for pending invited members who have not yet joined */}
+                  {!isCurrentUser && isInvited && userEmail && (
                     <button
                       type="button"
                       onClick={() => handleReinvite(userEmail, role as any, userName, user.node_id)}

@@ -158,6 +158,16 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
     ? t('sync.lastSynced', { time: new Date(syncState.lastSyncedAt).toLocaleTimeString() })
     : t('sync.neverSynced');
 
+  const handleBadgeClick = () => {
+    if (syncState.status === 'conflict_detected' || syncState.activeConflicts.length > 0) {
+      if (lad?.openConflictModal) {
+        lad.openConflictModal();
+        return;
+      }
+    }
+    if (onSyncClick) onSyncClick();
+  };
+
   return (
     <div
       className="relative inline-block text-left"
@@ -165,10 +175,10 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
       onMouseLeave={handleMouseLeave}
     >
       <button
-        onClick={onSyncClick}
+        onClick={handleBadgeClick}
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 ${badge.bg}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 cursor-pointer ${badge.bg}`}
       >
         {badge.icon}
         <span>{badge.text}</span>
@@ -259,7 +269,25 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
             )}
 
             {/* Action Buttons */}
-            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
+              {syncState.activeConflicts.length > 0 && (
+                <button
+                  type="button"
+                  data-testid="btn-resolve-conflicts-pane"
+                  onClick={() => {
+                    if (lad?.openConflictModal) {
+                      lad.openConflictModal();
+                      setIsOpen(false);
+                    }
+                  }}
+                  className="w-full py-2 px-3 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>
+                    {t('sync.resolveConflicts', { count: syncState.activeConflicts.length })}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {

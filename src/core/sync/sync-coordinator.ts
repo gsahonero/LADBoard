@@ -151,13 +151,21 @@ export class SyncCoordinator {
           );
 
           if (conflictingRemote) {
-            const conflict = ConflictResolver.detectConflict(localOp, conflictingRemote);
+            const targetObj = this.objectStore?.get(localOp.target);
+            const conflict = ConflictResolver.detectConflict(localOp, conflictingRemote, {
+              title: targetObj?.title,
+              domain: targetObj?.domain,
+            });
             if (conflict) {
-              this.state.activeConflicts.push(conflict);
+              if (!this.state.activeConflicts.some((c) => c.targetId === conflict.targetId && !c.resolved)) {
+                this.state.activeConflicts.push(conflict);
+              }
               this.updateState({
                 status: 'conflict_detected',
                 activeConflicts: this.state.activeConflicts,
               });
+              // Do not overwrite remote with conflicting localOp until user resolves
+              continue;
             }
           }
 
@@ -227,6 +235,30 @@ export class SyncCoordinator {
 
       if (newRemoteOps.length > 0) {
         for (const newOp of newRemoteOps) {
+          // Check if local offlineQueue has a pending operation on the same target
+          const conflictingPendingLocal = this.offlineQueue
+            .getQueue()
+            .find((lo) => lo.target === newOp.target && lo.actor !== newOp.actor);
+
+          if (conflictingPendingLocal) {
+            const targetObj = this.objectStore?.get(newOp.target);
+            const conflict = ConflictResolver.detectConflict(conflictingPendingLocal, newOp, {
+              title: targetObj?.title,
+              domain: targetObj?.domain,
+            });
+            if (conflict) {
+              if (!this.state.activeConflicts.some((c) => c.targetId === conflict.targetId && !c.resolved)) {
+                this.state.activeConflicts.push(conflict);
+              }
+              this.updateState({
+                status: 'conflict_detected',
+                activeConflicts: this.state.activeConflicts,
+              });
+              await this.operationLog.append(newOp);
+              continue;
+            }
+          }
+
           await this.operationLog.append(newOp);
 
           // Apply remote operation data locally
@@ -285,19 +317,25 @@ export class SyncCoordinator {
               newOp.type.startsWith('invitation.')
             ) {
               const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
-              if (remoteNodes) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
-              const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
-              if (remoteEdges) await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
-              if (this.graphStore) {
-                await this.graphStore.load();
+              if (remoteNodes) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
+                if (this.graphStore) await this.graphStore.load();
               }
-              const remoteManifest = await this.remoteStorage.readFile(`LAD/${this.spaceId}/manifest.json`);
-              if (remoteManifest) await this.localStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, remoteManifest);
+              const remoteEdges = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/edges.json`);
+              if (remoteEdges) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
+                if (this.graphStore) await this.graphStore.load();
+              }
+              const remoteManifest = await this.remoteStorage.readFile<any>(`LAD/${this.spaceId}/manifest.json`);
+              if (remoteManifest) {
+                await this.localStorage.writeFile(`LAD/${this.spaceId}/manifest.json`, remoteManifest);
+              }
             }
-          } catch (applyErr) {
-            console.warn(`[LAD:SyncCoordinator] Warning applying remote op ${newOp.operation_id}:`, applyErr);
+          } catch (fileErr) {
+            console.warn(`[LAD:SyncCoordinator] Warning applying remote file for op ${newOp.operation_id}:`, fileErr);
           }
         }
+
         if (this.onRemoteOperationsApplied) {
           await this.onRemoteOperationsApplied(newRemoteOps);
         }
@@ -327,11 +365,118 @@ export class SyncCoordinator {
     }
   }
 
-  resolveConflict(conflictId: string, _choice: 'keep_local' | 'accept_remote') {
-    this.state.activeConflicts = this.state.activeConflicts.filter((c) => c.conflictId !== conflictId);
+  async resolveConflict(
+    conflictId: string,
+    choice: 'keep_local' | 'accept_remote' | 'merge',
+    mergedPatch?: Record<string, any>
+  ): Promise<void> {
+    const conflict = this.state.activeConflicts.find((c) => c.conflictId === conflictId);
+    if (!conflict) return;
+
+    conflict.resolved = true;
+    conflict.resolutionChoice = choice;
+    conflict.mergedPatch = mergedPatch;
+
+    const targetId = conflict.targetId;
+    const remoteOp = conflict.remoteOperation;
+    const localOp = conflict.localOperation;
+
+    if (choice === 'keep_local') {
+      // 1. Keep local: Push local object and operation to remote
+      if (this.remoteStorage) {
+        try {
+          const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
+          await remoteOpLog.loadAll();
+          await remoteOpLog.append(localOp);
+
+          const obj =
+            this.objectStore?.get(targetId) ||
+            (await this.localStorage.readFile(`LAD/${this.spaceId}/objects/${targetId}.json`));
+          if (obj) {
+            await this.remoteStorage.writeFile(`LAD/${this.spaceId}/objects/${targetId}.json`, obj);
+          }
+        } catch (err) {
+          console.warn('[LAD:SyncCoordinator] Warning keeping local on remote storage:', err);
+        }
+      }
+      // Remove from offline queue since localOp is now committed
+      await this.offlineQueue.remove(localOp.operation_id);
+
+    } else if (choice === 'accept_remote') {
+      // 2. Accept remote: Apply remote patch/object to local object store and localStorage
+      let applied = false;
+      if (this.remoteStorage) {
+        try {
+          const remoteObj = await this.remoteStorage.readFile(`LAD/${this.spaceId}/objects/${targetId}.json`);
+          if (remoteObj) {
+            await this.localStorage.writeFile(`LAD/${this.spaceId}/objects/${targetId}.json`, remoteObj);
+            if (this.objectStore) {
+              await this.objectStore.loadAll();
+            }
+            applied = true;
+          }
+        } catch (err) {
+          console.warn('[LAD:SyncCoordinator] Warning accepting remote object:', err);
+        }
+      }
+      if (!applied && this.objectStore && remoteOp.patch) {
+        await this.objectStore.update(targetId, remoteOp.patch);
+      }
+      // Discard conflicting local operation from offline queue
+      await this.offlineQueue.remove(localOp.operation_id);
+
+    } else if (choice === 'merge' && mergedPatch) {
+      // 3. Custom merge: Apply mergedPatch to local object store, save locally, push to remote
+      if (this.objectStore) {
+        await this.objectStore.update(targetId, mergedPatch);
+      }
+      const updatedObj =
+        this.objectStore?.get(targetId) ||
+        (await this.localStorage.readFile(`LAD/${this.spaceId}/objects/${targetId}.json`));
+
+      if (updatedObj) {
+        await this.localStorage.writeFile(`LAD/${this.spaceId}/objects/${targetId}.json`, updatedObj);
+        if (this.remoteStorage) {
+          try {
+            await this.remoteStorage.writeFile(`LAD/${this.spaceId}/objects/${targetId}.json`, updatedObj);
+          } catch (err) {
+            console.warn('[LAD:SyncCoordinator] Warning syncing merged object to remote:', err);
+          }
+        }
+      }
+
+      // Record merge operation to operationLog
+      const mergeOp: LADOperation = {
+        operation_id: `op_merge_${Math.random().toString(36).substring(2, 10)}`,
+        space_id: this.spaceId,
+        type: 'object.update',
+        target: targetId,
+        actor: localOp.actor,
+        timestamp: new Date().toISOString(),
+        lamport_clock: Date.now(),
+        patch: mergedPatch,
+      };
+      await this.operationLog.append(mergeOp);
+      if (this.remoteStorage) {
+        try {
+          const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
+          await remoteOpLog.loadAll();
+          await remoteOpLog.append(mergeOp);
+        } catch (err) {
+          console.warn('[LAD:SyncCoordinator] Warning appending mergeOp to remote:', err);
+        }
+      }
+      // Remove conflicting local operation
+      await this.offlineQueue.remove(localOp.operation_id);
+    }
+
+    // Filter out resolved conflict
+    this.state.activeConflicts = this.state.activeConflicts.filter((c) => c.conflictId !== conflictId && !c.resolved);
     this.updateState({
       activeConflicts: this.state.activeConflicts,
       status: this.state.activeConflicts.length > 0 ? 'conflict_detected' : 'synced',
+      pendingOpsCount: this.offlineQueue.size(),
+      lastSyncedAt: new Date().toISOString(),
     });
   }
 }

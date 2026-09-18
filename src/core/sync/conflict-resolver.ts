@@ -9,7 +9,11 @@ export class ConflictResolver {
   /**
    * Checks whether two concurrent operations on the same target conflict on scalar properties.
    */
-  static detectConflict(localOp: LADOperation, remoteOp: LADOperation): ConflictRecord | null {
+  static detectConflict(
+    localOp: LADOperation,
+    remoteOp: LADOperation,
+    targetMetadata?: { title?: string; domain?: string }
+  ): ConflictRecord | null {
     if (localOp.target !== remoteOp.target || localOp.actor === remoteOp.actor) {
       return null;
     }
@@ -35,6 +39,8 @@ export class ConflictResolver {
     return {
       conflictId: `cnf_${Math.random().toString(36).substring(2, 10)}`,
       targetId: localOp.target,
+      targetTitle: targetMetadata?.title || localOp.patch?.title || remoteOp.patch?.title,
+      targetDomain: targetMetadata?.domain || localOp.patch?.domain || remoteOp.patch?.domain,
       localOperation: localOp,
       remoteOperation: remoteOp,
       conflictingKeys,

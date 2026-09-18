@@ -258,24 +258,70 @@ export class SpaceManager {
         // Reload local memory
         await objectStore.loadAll();
         await graphStore.load();
+        await this.deduplicateUserNodes(spaceId);
         activeEngine.evaluateObjects(objectStore.getAll());
       },
     });
 
     // Ensure current user is present as a node in the graph with real display name & correct role
-    const existingUserNode = graphStore.getNodes().find(
-      (n) => n.ref_id === currentUserId || n.node_id === `node_${currentUserId}`
-    );
+    const normalizedCurrentEmail = currentUserEmail?.trim().toLowerCase();
+    const existingUserNode = graphStore.getNodes().find((n) => {
+      if (n.type !== 'user') return false;
+      if (n.ref_id === currentUserId || n.node_id === `node_${currentUserId}` || n.node_id === currentUserId) return true;
+      if (normalizedCurrentEmail) {
+        const nodeEmail = (n.metadata?.email || (n.label.includes('@') ? n.label : '')).trim().toLowerCase();
+        return nodeEmail === normalizedCurrentEmail;
+      }
+      return false;
+    });
+
     const isOwner = manifest.created_by === currentUserId;
     const resolvedRole = (existingUserNode?.metadata?.role as any) || (isOwner ? 'owner' : 'editor');
-    const resolvedName = currentUserName || existingUserNode?.label || (isOwner ? 'Owner' : 'Collaborator');
+    const resolvedName = currentUserName || existingUserNode?.metadata?.name || existingUserNode?.label || (isOwner ? 'Owner' : 'Collaborator');
 
-    await graphStore.ensureNodeForEntity(currentUserId, 'user', resolvedName, {
-      name: resolvedName,
-      email: currentUserEmail || existingUserNode?.metadata?.email,
-      role: resolvedRole,
-      status: 'active',
-    });
+    if (existingUserNode) {
+      const prevInvitedName =
+        existingUserNode.metadata?.invited_name ||
+        (existingUserNode.label !== resolvedName && !existingUserNode.label.includes('@')
+          ? existingUserNode.label
+          : undefined);
+
+      await graphStore.updateNode(existingUserNode.node_id, {
+        label: resolvedName,
+        ref_id: currentUserId,
+        metadata: {
+          ...existingUserNode.metadata,
+          name: resolvedName,
+          email: currentUserEmail || existingUserNode.metadata?.email,
+          role: resolvedRole,
+          status: 'active',
+          user_id: currentUserId,
+          ...(prevInvitedName ? { invited_name: prevInvitedName } : {}),
+        },
+      });
+
+      // Update edges pointing to this node to active membership
+      const edges = graphStore.getEdges().filter((e) => e.target === existingUserNode.node_id);
+      for (const edge of edges) {
+        if (edge.type === 'proposed_membership') {
+          await graphStore.updateEdge(edge.edge_id, {
+            type: 'member_of',
+            metadata: {
+              ...edge.metadata,
+              status: 'active',
+              role: resolvedRole,
+            },
+          });
+        }
+      }
+    } else {
+      await graphStore.ensureNodeForEntity(currentUserId, 'user', resolvedName, {
+        name: resolvedName,
+        email: currentUserEmail,
+        role: resolvedRole,
+        status: 'active',
+      });
+    }
 
     const loaded: LoadedSpace = {
       manifest,
@@ -291,6 +337,9 @@ export class SpaceManager {
 
     this.loadedSpaces.set(spaceId, loaded);
     this.activeSpaceId = spaceId;
+
+    // Self-healing: Deduplicate any pre-existing duplicate user nodes sharing the same email
+    await this.deduplicateUserNodes(spaceId);
 
     // Initial active engine evaluation
     activeEngine.evaluateObjects(objectStore.getAll());
@@ -347,15 +396,16 @@ export class SpaceManager {
 
     let invitedNode: LADGraphNode;
     if (existingNode) {
+      const isAlreadyActive = existingNode.metadata?.status === 'active';
       invitedNode = (await space.graphStore.updateNode(existingNode.node_id, {
-        label: displayName,
+        label: isAlreadyActive ? existingNode.label : displayName,
         metadata: {
           ...existingNode.metadata,
           invitation_id: invId,
-          name: displayName,
-          invited_name: rawName || undefined,
+          name: isAlreadyActive ? existingNode.metadata?.name || existingNode.label : displayName,
+          invited_name: rawName || existingNode.metadata?.invited_name || undefined,
           email: invitedEmail,
-          status: 'invited',
+          status: isAlreadyActive ? 'active' : 'invited',
           role,
         },
       })) || existingNode;
@@ -491,6 +541,22 @@ export class SpaceManager {
     // 4. Remove node and all associated edges from graphStore
     await space.graphStore.removeNode(node.node_id);
 
+    // Clean up any other duplicate user nodes sharing this email address
+    if (removedEmail && removedEmail !== 'user@ladboard.local') {
+      const remainingDuplicates = space.graphStore
+        .getNodes()
+        .filter(
+          (n) =>
+            n.type === 'user' &&
+            n.node_id !== node.node_id &&
+            (n.metadata?.email || (n.label.includes('@') ? n.label : '')).trim().toLowerCase() ===
+              removedEmail.toLowerCase()
+        );
+      for (const dup of remainingDuplicates) {
+        await space.graphStore.removeNode(dup.node_id);
+      }
+    }
+
     // 5. Update space manifest timestamp and save
     space.manifest.updated_at = new Date().toISOString();
     await this.localStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
@@ -524,6 +590,223 @@ export class SpaceManager {
     }
 
     return { success: true, removedEmail };
+  }
+
+  /**
+   * Scans and merges any duplicate user nodes sharing the same email address in the space graph.
+   * Ensures exactly one canonical active user node per email, migrating all edges and object assignments.
+   */
+  async deduplicateUserNodes(spaceId: string): Promise<{ mergedCount: number }> {
+    const space = this.loadedSpaces.get(spaceId);
+    if (!space) return { mergedCount: 0 };
+
+    const nodes = space.graphStore.getNodes();
+    const userNodes = nodes.filter((n) => n.type === 'user');
+
+    // Group by normalized email
+    const byEmail = new Map<string, LADGraphNode[]>();
+    for (const u of userNodes) {
+      const email = (u.metadata?.email || (u.label.includes('@') ? u.label : '')).trim().toLowerCase();
+      if (!email || email === 'user@ladboard.local') continue;
+
+      if (!byEmail.has(email)) byEmail.set(email, []);
+      byEmail.get(email)!.push(u);
+    }
+
+    let mergedCount = 0;
+    for (const [email, duplicates] of byEmail.entries()) {
+      if (duplicates.length <= 1) continue;
+
+      // Pick the canonical node:
+      // Prefer active over invited; prefer real user_id over usr_invited_; prefer newest updated_at
+      duplicates.sort((a, b) => {
+        const aActive = a.metadata?.status === 'active' ? 1 : 0;
+        const bActive = b.metadata?.status === 'active' ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+
+        const aInvited = (a.ref_id || '').startsWith('usr_invited_') ? 0 : 1;
+        const bInvited = (b.ref_id || '').startsWith('usr_invited_') ? 0 : 1;
+        if (aInvited !== bInvited) return bInvited - aInvited;
+
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+
+      const canonical = duplicates[0];
+      const redundant = duplicates.slice(1);
+
+      // Collect invited_name from redundant nodes if canonical does not have one
+      const invitedName =
+        canonical.metadata?.invited_name ||
+        redundant.find((r) => r.metadata?.invited_name)?.metadata?.invited_name ||
+        redundant.find((r) => r.metadata?.name && r.metadata?.status === 'invited')?.metadata?.name ||
+        redundant.find((r) => r.label && !r.label.includes('@'))?.label;
+
+      const roles = [canonical.metadata?.role, ...redundant.map((r) => r.metadata?.role)].filter(Boolean);
+      const bestRole = roles.includes('owner') ? 'owner' : roles.includes('editor') ? 'editor' : 'viewer';
+      const isActive = canonical.metadata?.status === 'active' || redundant.some((r) => r.metadata?.status === 'active');
+
+      // Update canonical node
+      await space.graphStore.updateNode(canonical.node_id, {
+        metadata: {
+          ...canonical.metadata,
+          email,
+          role: bestRole,
+          status: isActive ? 'active' : canonical.metadata?.status || 'invited',
+          ...(invitedName && invitedName !== canonical.label ? { invited_name: invitedName } : {}),
+        },
+      });
+
+      // For each redundant node, migrate edges and object assignments
+      for (const red of redundant) {
+        // Re-point edges
+        const edges = space.graphStore.getEdges();
+        for (const edge of edges) {
+          let needsUpdate = false;
+          let newSource = edge.source;
+          let newTarget = edge.target;
+          let newType = edge.type;
+
+          if (edge.source === red.node_id) {
+            newSource = canonical.node_id;
+            needsUpdate = true;
+          }
+          if (edge.target === red.node_id) {
+            newTarget = canonical.node_id;
+            needsUpdate = true;
+            if (isActive && edge.type === 'proposed_membership') {
+              newType = 'member_of';
+            }
+          }
+
+          if (needsUpdate) {
+            // Check if an identical edge already exists
+            const existingEdge = space.graphStore
+              .getEdges()
+              .find((e) => e.edge_id !== edge.edge_id && e.source === newSource && e.target === newTarget);
+            if (existingEdge) {
+              await space.graphStore.removeEdge(edge.edge_id);
+            } else {
+              await space.graphStore.updateEdge(edge.edge_id, {
+                source: newSource,
+                target: newTarget,
+                type: newType,
+                metadata: {
+                  ...edge.metadata,
+                  status: isActive ? 'active' : edge.metadata?.status,
+                },
+              });
+            }
+          }
+        }
+
+        // Migrate object assignments
+        for (const obj of space.objectStore.getAll()) {
+          if (obj.assigned_to === red.node_id || obj.assigned_to === red.ref_id) {
+            await space.objectStore.update(obj.object_id, {
+              assigned_to: canonical.ref_id || canonical.node_id,
+            });
+          }
+        }
+
+        // Delete redundant node from graphStore
+        await space.graphStore.removeNode(red.node_id);
+        mergedCount++;
+      }
+    }
+
+    if (mergedCount > 0) {
+      console.log(`[LAD:SpaceManager] ✅ Successfully deduplicated ${mergedCount} duplicate user nodes in space ${spaceId}`);
+      await space.graphStore.save();
+    }
+
+    return { mergedCount };
+  }
+
+  /**
+   * Reconciles an existing user or invitation node with an accepting user's real identity
+   */
+  async reconcileUserNode(
+    spaceId: string,
+    currentUserId: string,
+    currentUserName: string,
+    currentUserEmail?: string,
+    role: 'owner' | 'editor' | 'viewer' = 'editor'
+  ): Promise<LADGraphNode> {
+    const space = await this.loadSpace(spaceId, currentUserId, 1500, undefined, currentUserName, currentUserEmail);
+    const normalizedEmail = currentUserEmail?.trim().toLowerCase();
+
+    // 1. Search for existing node by email or ID
+    const nodes = space.graphStore.getNodes();
+    const existingNode = nodes.find((n) => {
+      if (n.type !== 'user') return false;
+      if (n.ref_id === currentUserId || n.node_id === `node_${currentUserId}` || n.node_id === currentUserId) return true;
+      if (normalizedEmail) {
+        const nodeEmail = (n.metadata?.email || (n.label.includes('@') ? n.label : '')).trim().toLowerCase();
+        return nodeEmail === normalizedEmail;
+      }
+      return false;
+    });
+
+    let activeNode: LADGraphNode;
+    if (existingNode) {
+      const prevInvitedName =
+        existingNode.metadata?.invited_name ||
+        (existingNode.label !== currentUserName && !existingNode.label.includes('@') ? existingNode.label : undefined);
+
+      activeNode =
+        (await space.graphStore.updateNode(existingNode.node_id, {
+          label: currentUserName,
+          ref_id: currentUserId,
+          metadata: {
+            ...existingNode.metadata,
+            name: currentUserName,
+            email: currentUserEmail || existingNode.metadata?.email,
+            status: 'active',
+            role: existingNode.metadata?.role || role,
+            accepted_at: new Date().toISOString(),
+            user_id: currentUserId,
+            ...(prevInvitedName ? { invited_name: prevInvitedName } : {}),
+          },
+        })) || existingNode;
+
+      // Update edges pointing to this node
+      const edges = space.graphStore.getEdges().filter((e) => e.target === existingNode.node_id);
+      for (const edge of edges) {
+        await space.graphStore.updateEdge(edge.edge_id, {
+          type: 'member_of',
+          metadata: {
+            ...edge.metadata,
+            status: 'active',
+            role: activeNode.metadata?.role || role,
+          },
+        });
+      }
+    } else {
+      activeNode = await space.graphStore.ensureNodeForEntity(currentUserId, 'user', currentUserName, {
+        name: currentUserName,
+        email: currentUserEmail,
+        status: 'active',
+        role,
+        accepted_at: new Date().toISOString(),
+        user_id: currentUserId,
+      });
+    }
+
+    // Clean up any remaining duplicate nodes for this email
+    await this.deduplicateUserNodes(spaceId);
+
+    // Sync updated graph and manifest to remote storage if connected
+    if (this.remoteStorage) {
+      try {
+        await this.remoteStorage.writeFile(this.getManifestPath(spaceId), space.manifest);
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/nodes.json`, space.graphStore.getNodes());
+        await this.remoteStorage.writeFile(`LAD/${spaceId}/graph/edges.json`, space.graphStore.getEdges());
+      } catch (err) {
+        console.warn('[LAD:SpaceManager] Sync after reconcileUserNode failed:', err);
+      }
+    }
+
+    return activeNode;
   }
 
   /**

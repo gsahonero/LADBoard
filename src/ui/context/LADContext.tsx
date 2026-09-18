@@ -102,9 +102,17 @@ export interface LADContextType {
   approveProposal: (proposalId: string) => Promise<void>;
   rejectProposal: (proposalId: string) => void;
 
-  // Sync State
+  // Sync & Conflict Resolution
   syncState: SyncState;
   triggerSync: () => Promise<void>;
+  resolveConflict: (
+    conflictId: string,
+    choice: 'keep_local' | 'accept_remote' | 'merge',
+    mergedPatch?: Record<string, any>
+  ) => Promise<void>;
+  isConflictModalOpen: boolean;
+  openConflictModal: () => void;
+  closeConflictModal: () => void;
 
   // Version History
   operations: LADOperation[];
@@ -143,6 +151,15 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     activeConflicts: [],
     errorMessage: null,
   });
+
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+
+  // Automatically emerge Conflict Solver dialogue when a conflict appears
+  useEffect(() => {
+    if (syncState.activeConflicts.length > 0) {
+      setIsConflictModalOpen(true);
+    }
+  }, [syncState.activeConflicts.length]);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -348,6 +365,25 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setActiveSpace((prev) => (prev ? { ...prev, manifest: { ...activeSpace.manifest } } : null));
     }
   }, [activeSpace]);
+
+  const openConflictModal = useCallback(() => setIsConflictModalOpen(true), []);
+  const closeConflictModal = useCallback(() => setIsConflictModalOpen(false), []);
+
+  const resolveConflict = useCallback(
+    async (
+      conflictId: string,
+      choice: 'keep_local' | 'accept_remote' | 'merge',
+      mergedPatch?: Record<string, any>
+    ): Promise<void> => {
+      if (!activeSpace) return;
+      await activeSpace.syncCoordinator.resolveConflict(conflictId, choice, mergedPatch);
+      refreshSpaceState();
+      if (activeSpace.syncCoordinator.getState().activeConflicts.length === 0) {
+        setIsConflictModalOpen(false);
+      }
+    },
+    [activeSpace, refreshSpaceState]
+  );
 
   const switchSpace = useCallback(
     async (spaceId: string) => {
@@ -694,13 +730,14 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           },
         });
 
-        // Ensure user node in graph is active
-        await loaded.graphStore.ensureNodeForEntity(userRegistry.user_id, 'user', userName, {
-          name: userName,
-          email: userEmail,
-          status: 'active',
-          role: 'editor',
-        });
+        // Reconcile user node in graph (upgrades invitation node in-place, preserves invited_name, converts proposed_membership to member_of, and deduplicates)
+        await spaceManager.reconcileUserNode(
+          spaceId,
+          userRegistry.user_id,
+          userName,
+          userEmail,
+          'editor'
+        );
 
         // Add / update user registry space with role editor
         const existingRef = userRegistry.spaces.find((s) => s.space_id === spaceId);
@@ -757,6 +794,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (typeof window !== 'undefined') {
           const cleanUrl = window.location.origin + window.location.pathname;
           window.history.replaceState({}, document.title, cleanUrl);
+        }
+
+        if (loaded.syncCoordinator && storageManager.getRemoteProvider()) {
+          loaded.syncCoordinator.triggerSync({ silent: true }).catch((err) => {
+            console.warn('[LAD:Context] Sync after joinSpace failed:', err);
+          });
         }
 
         TelemetryBus.getInstance().record('user_interaction', 'space_joined', { spaceId });
@@ -1349,6 +1392,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         rejectProposal,
         syncState,
         triggerSync,
+        resolveConflict,
+        isConflictModalOpen,
+        openConflictModal,
+        closeConflictModal,
         operations,
         updatePreferences,
         updateProfile,

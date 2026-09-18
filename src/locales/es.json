@@ -26,6 +26,7 @@
     "pendingChanges": "{count} pendientes de sincronizar",
     "needsAttention": "La sincronización necesita atención",
     "conflictDetected": "Conflicto detectado",
+    "resolveConflicts": "Resolver Conflictos ({count})",
     "syncNow": "Sincronizar Ahora",
     "syncing": "Sincronizando...",
     "lastSynced": "Última sincronización: {time}",
@@ -201,7 +202,8 @@
     "removingUser": "Eliminando...",
     "confirmRemove": "Sí, Eliminar",
     "cancel": "Cancelar",
-    "cannotRemoveOwner": "No se puede eliminar al propietario principal del Espacio."
+    "cannotRemoveOwner": "No se puede eliminar al propietario principal del Espacio.",
+    "invitedAs": "(invitado como \"{name}\")"
   },
   "historyView": {
     "title": "Historial de Actividad",
@@ -530,5 +532,33 @@
     "notFoundTitle": "Espacio No Disponible",
     "notFoundDesc": "No se pudo acceder a este Espacio. El espacio puede haber sido eliminado o los permisos de Google Drive aún no se han propagado.",
     "retryVerification": "Reintentar Verificación"
+  },
+  "conflictSolver": {
+    "dialogTitle": "Conflicto de Sincronización Detectado",
+    "dialogSubtitle": "Se detectaron cambios simultáneos para \"{title}\". Revisa las versiones a continuación y elige cómo resolver la diferencia.",
+    "conflictCounter": "Conflicto {current} de {total}",
+    "localVersionTitle": "Tu Versión (Este Dispositivo)",
+    "remoteVersionTitle": "Versión en la Nube (Colaborador)",
+    "localActor": "Tú (Local)",
+    "remoteActor": "Colaborador (Nube)",
+    "propertyColumn": "Campo",
+    "localValueColumn": "Tu Valor",
+    "remoteValueColumn": "Valor en la Nube",
+    "keepLocal": "Conservar Mi Versión",
+    "keepLocalDesc": "Mantiene tus cambios locales y los sube a la nube.",
+    "acceptRemote": "Aceptar Versión de la Nube",
+    "acceptRemoteDesc": "Descarta tus cambios locales y acepta los del colaborador.",
+    "customMerge": "Combinación Personalizada Campo por Campo",
+    "customMergeDesc": "Elige individualmente qué valor conservar en cada campo, o edita un texto personalizado.",
+    "mergeChoiceMine": "Conservar Mío",
+    "mergeChoiceTheirs": "Conservar Nube",
+    "mergeCustomValue": "Valor Personalizado",
+    "applyResolution": "Aplicar Resolución",
+    "reviewLater": "Revisar Más Tarde",
+    "resolvedSuccess": "Conflicto resuelto con éxito.",
+    "unresolvedNotice": "Este conflicto permanecerá activo hasta que sea resuelto.",
+    "resolveAllLocal": "Conservar Todo Local",
+    "resolveAllRemote": "Aceptar Todo de la Nube",
+    "itemFallbackTitle": "Elemento #{id}"
   }
 }

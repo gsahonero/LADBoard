@@ -16,11 +16,14 @@ export type SyncStatus =
 export interface ConflictRecord {
   conflictId: string;
   targetId: string;
+  targetTitle?: string;
+  targetDomain?: string;
   localOperation: LADOperation;
   remoteOperation: LADOperation;
   conflictingKeys: string[];
   resolved: boolean;
   resolutionChoice?: 'keep_local' | 'accept_remote' | 'merge';
+  mergedPatch?: Record<string, any>;
   createdAt: string;
 }
 

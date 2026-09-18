@@ -26,6 +26,7 @@
     "pendingChanges": "{count} pending sync",
     "needsAttention": "Sync needs attention",
     "conflictDetected": "Conflict detected",
+    "resolveConflicts": "Resolve Conflicts ({count})",
     "syncNow": "Sync Now",
     "syncing": "Syncing...",
     "lastSynced": "Last synced: {time}",
@@ -201,7 +202,8 @@
     "removingUser": "Removing...",
     "confirmRemove": "Yes, Remove",
     "cancel": "Cancel",
-    "cannotRemoveOwner": "The primary Space owner cannot be removed."
+    "cannotRemoveOwner": "The primary Space owner cannot be removed.",
+    "invitedAs": "(invited as \"{name}\")"
   },
   "historyView": {
     "title": "Activity History",
@@ -530,5 +532,33 @@
     "notFoundTitle": "Space Unavailable",
     "notFoundDesc": "Could not access this Space. The space may have been deleted or Google Drive permissions have not yet propagated.",
     "retryVerification": "Re-check Access"
+  },
+  "conflictSolver": {
+    "dialogTitle": "Sync Conflict Detected",
+    "dialogSubtitle": "Concurrent changes were detected for \"{title}\". Review the versions below and choose how to resolve the difference.",
+    "conflictCounter": "Conflict {current} of {total}",
+    "localVersionTitle": "Your Version (This Device)",
+    "remoteVersionTitle": "Cloud Version (Collaborator)",
+    "localActor": "You (Local)",
+    "remoteActor": "Collaborator (Cloud)",
+    "propertyColumn": "Field",
+    "localValueColumn": "Your Value",
+    "remoteValueColumn": "Cloud Value",
+    "keepLocal": "Keep My Version",
+    "keepLocalDesc": "Preserve your local changes and push them to the cloud.",
+    "acceptRemote": "Accept Cloud Version",
+    "acceptRemoteDesc": "Discard your local edits and accept the collaborator's changes.",
+    "customMerge": "Custom Field-by-Field Merge",
+    "customMergeDesc": "Pick which value to keep for each field individually, or edit custom text.",
+    "mergeChoiceMine": "Keep Mine",
+    "mergeChoiceTheirs": "Keep Cloud",
+    "mergeCustomValue": "Custom Value",
+    "applyResolution": "Apply Resolution",
+    "reviewLater": "Review Later",
+    "resolvedSuccess": "Conflict resolved successfully.",
+    "unresolvedNotice": "This conflict will remain active until resolved.",
+    "resolveAllLocal": "Keep All Local",
+    "resolveAllRemote": "Accept All Cloud",
+    "itemFallbackTitle": "Item #{id}"
   }
 }
