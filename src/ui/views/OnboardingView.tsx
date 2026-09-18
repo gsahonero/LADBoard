@@ -14,6 +14,7 @@ import {
   Briefcase,
   PenTool,
   CheckCircle2,
+  CloudDownload,
 } from 'lucide-react';
 
 import {
@@ -57,7 +58,7 @@ const stepVariants: Variants = {
 
 export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) => {
   const { t, locale, setLocale } = useI18n();
-  const { userRegistry, updateProfile, createSpace, updateSpaceIdentity, spaces } = useLAD();
+  const { userRegistry, updateProfile, createSpace, updateSpaceIdentity, spaces, restoreFromGoogleDrive } = useLAD();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [direction, setDirection] = useState<number>(1);
@@ -84,7 +85,25 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
   const [customSpaceDesc, setCustomSpaceDesc] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const handleRestoreFromGoogleDrive = async () => {
+    setIsRestoring(true);
+    setErrorMsg('');
+    try {
+      const res = await restoreFromGoogleDrive();
+      if (res.success) {
+        onComplete();
+      } else if (res.error) {
+        setErrorMsg(res.error);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to restore from Google Drive.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,6 +323,36 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
                   </motion.button>
                 </div>
               </form>
+
+              {/* Already used LAD Board flow for cross-device restore */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white/90 dark:bg-slate-800/90 px-3 text-slate-400 font-semibold tracking-wider">
+                    {t('onboarding.alreadyUsedDivider')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  {t('onboarding.alreadyUsedPrompt')}
+                </p>
+                <button
+                  type="button"
+                  data-testid="restore-from-gdrive-btn"
+                  onClick={handleRestoreFromGoogleDrive}
+                  disabled={isRestoring || isSubmitting}
+                  className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-sm rounded-2xl border border-slate-200/80 dark:border-slate-600/80 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <CloudDownload className={`w-4 h-4 text-blue-500 ${isRestoring ? 'animate-bounce' : ''}`} />
+                  <span>
+                    {isRestoring ? t('onboarding.restoring') : t('onboarding.restoreFromDrive')}
+                  </span>
+                </button>
+              </div>
             </motion.div>
           ) : (
             /* STEP 2: First Space Creation */

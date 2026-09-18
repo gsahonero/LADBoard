@@ -109,6 +109,13 @@ export class ChangeAggregator {
     }
   }
 
+  /**
+   * Commits all pending changes across all targets immediately
+   */
+  async flushAll(): Promise<void> {
+    await this.flush();
+  }
+
   private async commitPendingChange(targetId: string): Promise<void> {
     const pending = this.pendingChanges.get(targetId);
     if (!pending) return;

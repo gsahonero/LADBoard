@@ -121,6 +121,7 @@ export interface LADContextType {
   updatePreferences: (prefs: Partial<LADUserRegistry['preferences']>) => Promise<void>;
   updateProfile: (displayName: string, email?: string) => Promise<void>;
   connectGoogleDrive: (clientId?: string) => Promise<AuthUser | null>;
+  restoreFromGoogleDrive: (clientId?: string) => Promise<{ success: boolean; spacesCount: number; error?: string }>;
 
   isLoading: boolean;
 }
@@ -388,6 +389,16 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const switchSpace = useCallback(
     async (spaceId: string) => {
       if (!spaceManager || !userRegistry) return;
+
+      // Flush any debounced pending edits on current space before switching
+      if (activeSpace) {
+        try {
+          await activeSpace.changeAggregator.flushAll();
+        } catch (e) {
+          // ignore
+        }
+      }
+
       const spaceRef = userRegistry.spaces.find((s) => s.space_id === spaceId);
       const spaceName = spaceRef?.space_name || 'Personal';
       const loaded = await spaceManager.loadSpace(
@@ -398,6 +409,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         userRegistry.identities[0]?.display_name,
         userRegistry.identities[0]?.email
       );
+
+      // Ensure remote storage is wired to the switched space
+      if (storageManager.getRemoteProvider()) {
+        loaded.syncCoordinator.setRemoteStorage(storageManager.getRemoteProvider());
+      }
+
       if (loaded.manifest.settings?.custom_card_types) {
         SchemaRegistry.getInstance().importCustomCardTypes(loaded.manifest.settings.custom_card_types);
       }
@@ -408,9 +425,20 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setEdges(loaded.graphStore.getEdges());
       setOperations(loaded.operationLog.getOperations());
 
+      // Trigger a silent background sync for the switched space to pull remote changes
+      if (storageManager.getRemoteProvider()) {
+        loaded.syncCoordinator.triggerSync({ silent: true }).then(() => {
+          setObjects(loaded.objectStore.getAll());
+          setNodes(loaded.graphStore.getNodes());
+          setEdges(loaded.graphStore.getEdges());
+        }).catch((err) => {
+          console.debug('[LAD:Context] Space switch sync:', err);
+        });
+      }
+
       TelemetryBus.getInstance().record('user_interaction', 'space_switched', { spaceId });
     },
-    [spaceManager, userRegistry]
+    [spaceManager, userRegistry, activeSpace, storageManager]
   );
 
   const createSpace = useCallback(
@@ -1179,6 +1207,17 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 await userRegistryManager.saveRegistry(synced);
               }
               setUserRegistry({ ...synced });
+
+              // If active space was an empty initial local space and remote has existing spaces,
+              // switch to the primary remote space
+              if (synced.spaces.length > 0) {
+                const currentActiveId = activeSpace?.manifest.space_id;
+                const activeStillExists = synced.spaces.some((s) => s.space_id === currentActiveId);
+                const hasLocalCards = (activeSpace?.objectStore.getAll().length || 0) > 0;
+                if (!activeStillExists || (!hasLocalCards && synced.spaces[0].space_id !== currentActiveId)) {
+                  await switchSpace(synced.spaces[0].space_id);
+                }
+              }
             }
           }
           if (activeSpace) {
@@ -1238,7 +1277,34 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       userRegistryManager,
       updatePreferences,
       refreshSpaceState,
+      switchSpace,
     ]
+  );
+
+  const restoreFromGoogleDrive = useCallback(
+    async (clientId?: string): Promise<{ success: boolean; spacesCount: number; error?: string }> => {
+      try {
+        const user = await connectGoogleDrive(clientId);
+        if (!user) {
+          return { success: false, spacesCount: 0, error: 'Sign-in cancelled' };
+        }
+        if (userRegistryManager) {
+          const synced = await userRegistryManager.syncWithRemote();
+          if (synced && synced.spaces.length > 0) {
+            setUserRegistry({ ...synced });
+            await switchSpace(synced.spaces[0].space_id);
+            localStorage.setItem('lad_onboarded', 'true');
+            return { success: true, spacesCount: synced.spaces.length };
+          }
+        }
+        localStorage.setItem('lad_onboarded', 'true');
+        return { success: true, spacesCount: 0 };
+      } catch (err: any) {
+        console.error('[LAD:Context] Failed to restore from Google Drive:', err);
+        return { success: false, spacesCount: 0, error: err?.message || 'Failed to restore from Google Drive' };
+      }
+    },
+    [connectGoogleDrive, userRegistryManager, switchSpace]
   );
 
   const repairSpaceDriveFiles = useCallback(
@@ -1347,6 +1413,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     if (activeSpace) {
+      // Immediately flush any debounced edits before triggering sync
+      try {
+        await activeSpace.changeAggregator.flushAll();
+      } catch (err) {
+        console.warn('[LAD:Context] Warning flushing changeAggregator before triggerSync:', err);
+      }
       await activeSpace.syncCoordinator.triggerSync({ silent: false });
       refreshSpaceState();
     }
@@ -1400,6 +1472,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updatePreferences,
         updateProfile,
         connectGoogleDrive,
+        restoreFromGoogleDrive,
         isLoading,
       }}
     >

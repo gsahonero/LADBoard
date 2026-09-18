@@ -22,6 +22,8 @@
   "sync": {
     "synced": "Saved & Synced",
     "savedLocally": "Saved on device",
+    "savedLocallyBadge": "Saved on device",
+    "sessionExpired": "Session Expired",
     "offline": "Offline",
     "pendingChanges": "{count} pending sync",
     "needsAttention": "Sync needs attention",
@@ -359,6 +361,10 @@
     "erasingData": "Erasing all data..."
   },
   "onboarding": {
+    "alreadyUsedDivider": "Already used LAD Board?",
+    "alreadyUsedPrompt": "Accessing from another device? Restore your spaces and cards directly from Google Drive.",
+    "restoreFromDrive": "Restore from Google Drive",
+    "restoring": "Connecting & Restoring...",
     "step1": {
       "badge": "Step 1 of 2",
       "title": "Welcome to LAD Board",

@@ -11,6 +11,7 @@ import { LADOperation } from '../standard/types';
 import { ObjectStore } from '../objects/object-store';
 import { GraphStore } from '../graph/graph-store';
 import { SchemaRegistry } from '../schemas/schema-registry';
+import { ChangeAggregator } from '../operations/change-aggregator';
 
 export class SyncCoordinator {
   private spaceId: string;
@@ -20,6 +21,7 @@ export class SyncCoordinator {
   private operationLog: OperationLog;
   private objectStore?: ObjectStore;
   private graphStore?: GraphStore;
+  private changeAggregator?: ChangeAggregator;
   private onRemoteOperationsApplied?: (ops: LADOperation[]) => Promise<void>;
 
   private state: SyncState = {
@@ -42,6 +44,7 @@ export class SyncCoordinator {
     operationLog: OperationLog;
     objectStore?: ObjectStore;
     graphStore?: GraphStore;
+    changeAggregator?: ChangeAggregator;
     onRemoteOperationsApplied?: (ops: LADOperation[]) => Promise<void>;
   }) {
     this.spaceId = params.spaceId;
@@ -51,9 +54,14 @@ export class SyncCoordinator {
     this.operationLog = params.operationLog;
     this.objectStore = params.objectStore;
     this.graphStore = params.graphStore;
+    this.changeAggregator = params.changeAggregator;
     this.onRemoteOperationsApplied = params.onRemoteOperationsApplied;
 
     this.setupNetworkListeners();
+  }
+
+  setChangeAggregator(aggregator?: ChangeAggregator) {
+    this.changeAggregator = aggregator;
   }
 
   private setupNetworkListeners() {
@@ -64,6 +72,34 @@ export class SyncCoordinator {
       });
       window.addEventListener('offline', () => {
         this.updateState({ isOnline: false, status: 'offline' });
+      });
+      window.addEventListener('focus', () => {
+        // Tab gained focus, re-sync quietly to catch multi-device updates
+        this.triggerSync({ silent: true }).catch((err) => {
+          console.debug('[LAD:SyncCoordinator] Focus sync check:', err);
+        });
+      });
+      window.addEventListener('beforeunload', () => {
+        // Immediately flush any debounced changes before closing or navigating away
+        if (this.changeAggregator) {
+          this.changeAggregator.flushAll().catch(() => {});
+        }
+      });
+    }
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          // Tab became visible again, sync changes from other devices
+          this.triggerSync({ silent: true }).catch((err) => {
+            console.debug('[LAD:SyncCoordinator] Visibility sync check:', err);
+          });
+        } else if (document.visibilityState === 'hidden') {
+          // Tab hidden / mobile app put to background: immediately flush all debounced changes
+          if (this.changeAggregator) {
+            this.changeAggregator.flushAll().catch(() => {});
+          }
+        }
       });
     }
   }
@@ -126,6 +162,15 @@ export class SyncCoordinator {
     if (!this.state.isOnline) {
       this.updateState({ status: 'offline' });
       return;
+    }
+
+    // Flush any pending debounced changes before checking offline queue
+    if (this.changeAggregator) {
+      try {
+        await this.changeAggregator.flushAll();
+      } catch (err) {
+        console.warn('[LAD:SyncCoordinator] Warning flushing changeAggregator before sync:', err);
+      }
     }
 
     const pendingOps = this.offlineQueue.getQueue();
@@ -341,9 +386,81 @@ export class SyncCoordinator {
         }
       }
 
-      // If silent background check and nothing was pushed and nothing was pulled,
+      // Step 3: Direct Object & Graph State Reconciliation
+      // Even if operation logs collided or lagged, reconcile objects directly from remote storage
+      let directReconciliationApplied = false;
+      try {
+        const localDeletedTargets = new Set(
+          this.operationLog
+            .getOperations()
+            .filter((o) => o.type === 'object.delete')
+            .map((o) => o.target)
+        );
+
+        const remoteObjectFiles = await this.remoteStorage.listFiles(`LAD/${this.spaceId}/objects`);
+        for (const file of remoteObjectFiles) {
+          if (!file.name.endsWith('.json')) continue;
+          const objectId = file.name.replace(/\.json$/, '');
+
+          if (localDeletedTargets.has(objectId)) continue;
+
+          // Do not overwrite an object that currently has an active conflict
+          if (this.state.activeConflicts.some((c) => c.targetId === objectId && !c.resolved)) {
+            continue;
+          }
+
+          const localObj =
+            this.objectStore?.get(objectId) ||
+            (await this.localStorage.readFile<any>(`LAD/${this.spaceId}/objects/${file.name}`));
+
+          const remoteObj = await this.remoteStorage.readFile<any>(file.path);
+          if (!remoteObj || !remoteObj.object_id) continue;
+
+          if (!localObj) {
+            // New object from remote storage not yet present locally!
+            await this.localStorage.writeFile(`LAD/${this.spaceId}/objects/${file.name}`, remoteObj);
+            directReconciliationApplied = true;
+          } else {
+            const remoteTime = new Date(remoteObj.updated_at || 0).getTime();
+            const localTime = new Date(localObj.updated_at || 0).getTime();
+            if (remoteTime > localTime) {
+              await this.localStorage.writeFile(`LAD/${this.spaceId}/objects/${file.name}`, remoteObj);
+              directReconciliationApplied = true;
+            }
+          }
+        }
+
+        // Reconcile graph if local graph is completely empty
+        if (this.graphStore && this.graphStore.getNodes().length === 0) {
+          const remoteNodes = await this.remoteStorage.readFile<any[]>(`LAD/${this.spaceId}/graph/nodes.json`);
+          if (remoteNodes && Array.isArray(remoteNodes) && remoteNodes.length > 0) {
+            await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/nodes.json`, remoteNodes);
+            await this.graphStore.load();
+            directReconciliationApplied = true;
+          }
+          const remoteEdges = await this.remoteStorage.readFile<any[]>(`LAD/${this.spaceId}/graph/edges.json`);
+          if (remoteEdges && Array.isArray(remoteEdges) && remoteEdges.length > 0) {
+            await this.localStorage.writeFile(`LAD/${this.spaceId}/graph/edges.json`, remoteEdges);
+            await this.graphStore.load();
+            directReconciliationApplied = true;
+          }
+        }
+      } catch (reconErr) {
+        console.warn(`[LAD:SyncCoordinator] Direct object reconciliation note:`, reconErr);
+      }
+
+      if (directReconciliationApplied) {
+        if (this.objectStore) {
+          await this.objectStore.loadAll();
+        }
+        if (this.onRemoteOperationsApplied) {
+          await this.onRemoteOperationsApplied([]);
+        }
+      }
+
+      // If silent background check and nothing was pushed, pulled, or reconciled,
       // exit immediately: DO NOT update state, DO NOT bump lastSyncedAt, DO NOT trigger re-renders!
-      if (isSilent && !hasLocalPending && newRemoteOps.length === 0) {
+      if (isSilent && !hasLocalPending && newRemoteOps.length === 0 && !directReconciliationApplied) {
         return;
       }
 

@@ -53,6 +53,16 @@ export class UserRegistryManager {
         console.log('[LAD:UserRegistry] Found remote user.json with', remoteReg.spaces.length, 'spaces');
 
         if (this.registry) {
+          // If local registry was a fresh local device registry with a different user_id,
+          // adopt remote user_id and identity so user permissions, roles, and ownership match across devices
+          if (remoteReg.user_id && this.registry.user_id !== remoteReg.user_id) {
+            console.log(`[LAD:UserRegistry] Adopting remote user_id ${remoteReg.user_id} (was local ${this.registry.user_id})`);
+            this.registry.user_id = remoteReg.user_id;
+            if (remoteReg.identities && remoteReg.identities.length > 0) {
+              this.registry.identities = remoteReg.identities;
+            }
+          }
+
           // Merge spaces: strictly additive, never remove spaces where user is editor or owner
           const spaceMap = new Map<string, LADUserSpaceRef>();
 
@@ -65,8 +75,24 @@ export class UserRegistryManager {
           for (const s of this.registry.spaces) {
             const existing = spaceMap.get(s.space_id);
             if (!existing) {
-              // Local space (e.g. joined as editor) not yet in remote user.json: preserve it!
-              spaceMap.set(s.space_id, { ...s });
+              if (remoteReg.spaces.length === 0) {
+                spaceMap.set(s.space_id, { ...s });
+              } else {
+                // If local space has actual cards or was explicitly created by the user, keep it
+                const isLocalPlaceholder = s.space_name.toLowerCase() === 'personal' && s.storage_provider === 'local_indexeddb';
+                let hasLocalCards = false;
+                try {
+                  const localFiles = await this.localStorage.listFiles(`LAD/${s.space_id}/objects`);
+                  hasLocalCards = localFiles.some((f) => f.name.endsWith('.json'));
+                } catch {
+                  // ignore
+                }
+                if (hasLocalCards || !isLocalPlaceholder) {
+                  spaceMap.set(s.space_id, { ...s });
+                } else {
+                  console.log(`[LAD:UserRegistry] Pruned dummy empty local space ${s.space_id} in favor of remote spaces`);
+                }
+              }
             } else {
               // Space exists in both. Preserve the most permissive/active role.
               const resolvedRole =

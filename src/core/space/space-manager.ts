@@ -244,6 +244,7 @@ export class SpaceManager {
       operationLog,
       objectStore,
       graphStore,
+      changeAggregator,
       onRemoteOperationsApplied: async (ops) => {
         // If space manifest or settings were updated remotely, reload the manifest
         const hasManifestUpdate = ops.some(

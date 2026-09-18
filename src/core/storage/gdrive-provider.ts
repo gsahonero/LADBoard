@@ -65,6 +65,9 @@ export class GDriveStorageProvider implements IStorageProvider {
     const method = init?.method || 'GET';
     const headers = await this.getAuthHeader();
     const mergedHeaders: Record<string, string> = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
       ...(headers as Record<string, string>),
       ...((init?.headers as Record<string, string>) || {}),
     };
@@ -72,6 +75,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     console.debug(`[LAD:GDrive] ${method} ${url.split('?')[0]}`);
 
     const res = await fetch(url, {
+      cache: 'no-store',
       ...init,
       headers: mergedHeaders,
     });
@@ -339,7 +343,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     }
 
     const q = encodeURIComponent(`name = '${fileName}' and '${parentId}' in parents and trashed = false`);
-    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+    const searchRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true&_t=${Date.now()}`);
     const searchData = await searchRes.json();
 
     if (!searchData.files || searchData.files.length === 0) {
@@ -350,7 +354,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     const fileId = searchData.files[0].id;
     this.fileCache.set(normalized, fileId);
 
-    const downloadRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`);
+    const downloadRes = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true&_t=${Date.now()}`);
     const text = await downloadRes.text();
     console.log(`[LAD:GDrive] ✅ Read file "${path}" successfully (${text.length} chars)`);
     try {
@@ -471,7 +475,7 @@ export class GDriveStorageProvider implements IStorageProvider {
     console.log(`[LAD:GDrive] 📂 Listing files in "${directoryPath}" (parentId: ${parentId})...`);
 
     const q = encodeURIComponent(`'${parentId}' in parents and trashed = false`);
-    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+    const res = await this.fetchDrive(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&_t=${Date.now()}`);
     const data = await res.json();
 
     if (!data.files) return [];
