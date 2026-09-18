@@ -26,6 +26,9 @@ import {
   X,
   Archive,
   Search,
+  Columns3,
+  LayoutGrid,
+  Plus,
 } from 'lucide-react';
 
 export const LivingBoardView: React.FC = () => {
@@ -37,6 +40,20 @@ export const LivingBoardView: React.FC = () => {
   const [showArchive, setShowArchive] = useState<boolean>(false);
   const [archiveSearchQuery, setArchiveSearchQuery] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'stacks' | 'masonry'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lad_board_view_mode');
+      if (saved === 'masonry' || saved === 'stacks') return saved;
+    }
+    return 'stacks';
+  });
+
+  const handleToggleViewMode = (mode: 'stacks' | 'masonry') => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lad_board_view_mode', mode);
+    }
+  };
 
   const domainFilters = [
     { id: 'all', label: t('boardView.allCategories'), icon: Sparkles },
@@ -48,8 +65,45 @@ export const LivingBoardView: React.FC = () => {
     { id: 'projects', label: t('capture.domains.projects'), icon: Briefcase },
   ];
 
+  const CATEGORY_STACK_DEFS = [
+    { id: 'finances', label: t('capture.domains.finances') || 'Money', icon: CreditCard, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800' },
+    { id: 'shopping', label: t('capture.domains.shopping') || 'Shopping', icon: ShoppingBag, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' },
+    { id: 'health', label: t('capture.domains.health') || 'Health', icon: Heart, color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800' },
+    { id: 'home', label: t('capture.domains.home') || 'Home', icon: Home, color: 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800' },
+    { id: 'documents', label: t('capture.domains.documents') || 'Documents', icon: FileText, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800' },
+    { id: 'projects', label: t('capture.domains.projects') || 'Projects', icon: Briefcase, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800' },
+  ];
+
   const activeObjects = objects.filter((o) => o.status !== 'archived');
   const archivedObjects = objects.filter((o) => o.status === 'archived');
+
+  const stackCategories = useMemo(() => {
+    if (selectedDomain !== 'all') {
+      const found = CATEGORY_STACK_DEFS.find((c) => c.id === selectedDomain);
+      if (found) return [found];
+      return [{
+        id: selectedDomain,
+        label: selectedDomain.charAt(0).toUpperCase() + selectedDomain.slice(1),
+        icon: Sparkles,
+        color: 'text-slate-500 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+      }];
+    }
+
+    const definedIds = CATEGORY_STACK_DEFS.map((d) => d.id);
+    const extraDomains = Array.from(
+      new Set(activeObjects.map((o) => o.domain).filter((d) => !definedIds.includes(d)))
+    );
+
+    return [
+      ...CATEGORY_STACK_DEFS,
+      ...extraDomains.map((dom) => ({
+        id: dom,
+        label: dom.charAt(0).toUpperCase() + dom.slice(1),
+        icon: Sparkles,
+        color: 'text-slate-500 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+      })),
+    ];
+  }, [selectedDomain, activeObjects, t]);
 
   const filteredObjects = useMemo(() => {
     if (showArchive) {
@@ -69,6 +123,15 @@ export const LivingBoardView: React.FC = () => {
     }
     return result;
   }, [showArchive, archivedObjects, activeObjects, archiveSearchQuery, selectedDomain, dateFilter, searchQuery]);
+
+  const visibleStacks = useMemo(() => {
+    if (searchQuery.trim()) {
+      return stackCategories.filter((cat) =>
+        filteredObjects.some((o) => o.domain === cat.id)
+      );
+    }
+    return stackCategories;
+  }, [stackCategories, filteredObjects, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -155,7 +218,7 @@ export const LivingBoardView: React.FC = () => {
         </div>
       )}
 
-      {/* 5. Navigation Bar: Category Pills, Search Bar & Archive Toggle */}
+      {/* 5. Navigation Bar: Category Pills, Search Bar, View Mode Toggle & Archive Toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200/80 dark:border-slate-800 pb-3" data-testid="categories-filter-bar">
         {!showArchive ? (
           <>
@@ -198,7 +261,7 @@ export const LivingBoardView: React.FC = () => {
             </div>
 
             {/* Smart Space Board Search Bar */}
-            <div className="relative flex-1 min-w-[200px] max-w-xs sm:max-w-sm">
+            <div className="relative flex-1 min-w-[180px] max-w-xs sm:max-w-sm">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2 pointer-events-none" />
               <input
                 type="text"
@@ -219,6 +282,38 @@ export const LivingBoardView: React.FC = () => {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+
+            {/* View Mode Toggle: Stacks vs Masonry */}
+            <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shrink-0" data-testid="board-view-mode-toggle">
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode('stacks')}
+                title="Category Stacks View"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+                  viewMode === 'stacks'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+                data-testid="view-mode-stacks"
+              >
+                <Columns3 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Stacks</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode('masonry')}
+                title="Masonry Flow View"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+                  viewMode === 'masonry'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+                data-testid="view-mode-masonry"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Masonry</span>
+              </button>
             </div>
           </>
         ) : (
@@ -273,7 +368,7 @@ export const LivingBoardView: React.FC = () => {
         </div>
       )}
 
-      {/* 6. Object Cards Grid */}
+      {/* 6. Object Cards: Category Stacks View vs Masonry Flow View */}
       {filteredObjects.length === 0 ? (
         <div className="p-10 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-2">
           <Sparkles className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
@@ -295,11 +390,106 @@ export const LivingBoardView: React.FC = () => {
             </button>
           )}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 items-start" data-testid="living-board-grid">
+      ) : showArchive || viewMode === 'masonry' ? (
+        /* Masonry Flow View (Zero Row Gaps) */
+        <div
+          className="columns-1 sm:columns-2 lg:columns-3 gap-3.5 space-y-3.5 [column-fill:_balance]"
+          data-testid="living-board-grid"
+        >
           {filteredObjects.map((obj) => (
-            <ObjectCard key={obj.object_id} obj={obj} />
+            <div key={obj.object_id} className="break-inside-avoid">
+              <ObjectCard obj={obj} />
+            </div>
           ))}
+        </div>
+      ) : (
+        /* Category Stacks View (Grouped by domain, no vertical gaps, empty drop-zones) */
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start"
+          data-testid="living-board-grid"
+        >
+          {visibleStacks.map((cat) => {
+            const Icon = cat.icon;
+            const cardsInStack = filteredObjects.filter((o) => o.domain === cat.id);
+
+            return (
+              <div
+                key={cat.id}
+                className="flex flex-col space-y-3 bg-slate-50/70 dark:bg-slate-900/40 p-3.5 rounded-3xl border border-slate-200/70 dark:border-slate-800/70 transition-all h-fit"
+                data-testid={`category-stack-${cat.id}`}
+              >
+                {/* Stack Header */}
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1.5 rounded-xl border ${cat.color}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {cat.label}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                      {cardsInStack.length}
+                    </span>
+                  </div>
+                  {selectedDomain === 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDomain(cat.id);
+                        setDateFilter(null);
+                      }}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                      title={`Filter to ${cat.label}`}
+                    >
+                      Focus
+                    </button>
+                  )}
+                </div>
+
+                {/* Cards or Empty Drop-Zone Placeholder */}
+                {cardsInStack.length > 0 ? (
+                  <div className="space-y-3" data-testid={`stack-cards-${cat.id}`}>
+                    {cardsInStack.map((obj) => (
+                      <ObjectCard key={obj.object_id} obj={obj} />
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    className="p-6 border-2 border-dashed border-slate-200/90 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 bg-white/50 dark:bg-slate-900/30"
+                    data-testid={`empty-dropzone-${cat.id}`}
+                  >
+                    <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400">
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        No active cards
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Add or capture {cat.label.toLowerCase()} cards here
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const inputEl = document.querySelector(
+                          '[data-testid="smart-capture-input"]'
+                        ) as HTMLInputElement;
+                        if (inputEl) {
+                          inputEl.focus();
+                          inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                      className="mt-1 px-3 py-1 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-1 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add card</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -176,7 +176,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
     <>
       <motion.div
         whileHover={{ y: -2, transition: { duration: 0.2 } }}
-        className={`p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-sm transition-shadow hover:shadow-md ${style.border} flex flex-col justify-between space-y-3 h-fit group ${
+        className={`p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-sm transition-shadow hover:shadow-md ${style.border} flex flex-col justify-between space-y-3 h-fit w-full break-inside-avoid group ${
           isCompleted ? 'opacity-65 bg-slate-50/60 dark:bg-slate-950/60' : ''
         } ${isArchived ? 'opacity-75 border-dashed border-slate-300 dark:border-slate-700' : ''}`}
         data-testid={`card-${obj.object_id}`}
