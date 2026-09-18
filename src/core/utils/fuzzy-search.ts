@@ -76,7 +76,12 @@ export function fuzzyMatchScore(target: string, query: string): number {
   for (const qToken of queryTokens) {
     let matched = false;
     for (const tToken of targetTokens) {
-      if (tToken.includes(qToken) || qToken.includes(tToken)) {
+      if (tToken.includes(qToken)) {
+        matched = true;
+        break;
+      }
+      // Target token is a substantial stem/root of query token (e.g. 'doctor' in 'doctors')
+      if (tToken.length >= 4 && qToken.includes(tToken) && tToken.length / qToken.length >= 0.7) {
         matched = true;
         break;
       }
@@ -114,6 +119,19 @@ export function fuzzyMatchScore(target: string, query: string): number {
 }
 
 /**
+ * Multilingual domain & category synonyms for cross-language intelligent search
+ */
+export const DOMAIN_SYNONYMS: Record<string, string[]> = {
+  finances: ['finances', 'finance', 'money', 'dinero', 'banco', 'bank', 'saldo', 'balance', 'cuenta', 'account', 'finanzas', 'plata', 'credito', 'credit', 'tarjeta'],
+  health: ['health', 'salud', 'medico', 'médico', 'doctor', 'cita', 'appointment', 'hospital', 'clinica', 'clínica', 'medicina', 'dentist', 'dentista', 'consulta', 'analisis', 'análisis'],
+  shopping: ['shopping', 'compras', 'supermarket', 'supermercado', 'groceries', 'despensa', 'mercado', 'tienda', 'store', 'cart', 'lista', 'checklist'],
+  home: ['home', 'hogar', 'casa', 'repair', 'reparacion', 'reparación', 'limpieza', 'cleaning', 'mueble', 'furniture', 'fontanero', 'electricista'],
+  documents: ['documents', 'documentos', 'document', 'documento', 'contract', 'contrato', 'passport', 'pasaporte', 'dni', 'id', 'license', 'licencia', 'certificado', 'certificate', 'pdf'],
+  projects: ['projects', 'proyectos', 'project', 'proyecto', 'work', 'trabajo', 'task', 'tarea', 'deadline', 'entrega', 'reunión', 'reunion'],
+  general: ['general', 'note', 'nota', 'idea', 'reminder', 'recordatorio'],
+};
+
+/**
  * Helper to match an object against a query across multiple fields
  */
 export function matchLADObject(
@@ -123,6 +141,7 @@ export function matchLADObject(
     domain?: string;
     tags?: string[];
     assigned_to?: string;
+    attributes?: Record<string, any>;
     [key: string]: any;
   },
   query: string
@@ -133,9 +152,50 @@ export function matchLADObject(
     fuzzyMatchScore(obj.title, query) * 2, // Title has highest weight
     obj.description ? fuzzyMatchScore(obj.description, query) : -1,
     obj.domain ? fuzzyMatchScore(obj.domain, query) * 1.5 : -1,
+    obj.type
+      ? fuzzyMatchScore(obj.type.replace(/_/g, ' '), query) * 1.3
+      : obj.attributes?.card_type
+      ? fuzzyMatchScore(String(obj.attributes.card_type).replace(/[_.]/g, ' '), query) * 1.3
+      : -1,
     obj.assigned_to ? fuzzyMatchScore(obj.assigned_to, query) * 1.2 : -1,
     ...(obj.tags?.map((t) => fuzzyMatchScore(t, query) * 1.5) || []),
   ];
+
+  // 1. Multilingual category/domain synonyms
+  if (obj.domain && DOMAIN_SYNONYMS[obj.domain]) {
+    const synonyms = DOMAIN_SYNONYMS[obj.domain];
+    for (const syn of synonyms) {
+      const synScore = fuzzyMatchScore(syn, query);
+      if (synScore > 0) {
+        scores.push(synScore * 1.3);
+        break;
+      }
+    }
+  }
+
+  // 2. Deep dynamic attribute searching (bank names, checklist items, patients, currency, etc.)
+  if (obj.attributes) {
+    for (const [, val] of Object.entries(obj.attributes)) {
+      if (val === undefined || val === null || val === '') continue;
+
+      if (typeof val === 'string') {
+        scores.push(fuzzyMatchScore(val, query) * 1.4);
+      } else if (typeof val === 'number') {
+        const numStr = String(val);
+        const formattedNum = val.toLocaleString();
+        scores.push(fuzzyMatchScore(numStr, query) * 1.2);
+        scores.push(fuzzyMatchScore(formattedNum, query) * 1.2);
+      } else if (Array.isArray(val)) {
+        for (const item of val) {
+          if (typeof item === 'string') {
+            scores.push(fuzzyMatchScore(item, query) * 1.3);
+          } else if (item && typeof item === 'object' && item.text) {
+            scores.push(fuzzyMatchScore(item.text, query) * 1.3);
+          }
+        }
+      }
+    }
+  }
 
   const maxScore = Math.max(...scores);
   return {

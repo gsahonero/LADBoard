@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { LADObject } from '../../core/standard/types';
 import { useLAD } from '../context/LADContext';
@@ -6,6 +6,7 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { OnItsWayModal } from './OnItsWayModal';
 import { CardEditModal } from './CardEditModal';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
+import { CaptureParser } from '../../core/objects/capture-parser';
 import {
   Heart,
   CreditCard,
@@ -38,6 +39,41 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const checklist: Array<{ id: string; text: string; completed: boolean }> =
     obj.attributes?.checklist || [];
   const followup = obj.attributes?.followup;
+
+  // Resolves wildcards (e.g. {bank}, {account_type}, etc.) in card titles displayed on the board
+  const displayTitle = useMemo(() => {
+    const combinedData = {
+      ...(obj.attributes || {}),
+      title: obj.title,
+      domain: obj.domain,
+      due_date: obj.due_date,
+      assigned_to: obj.assigned_to,
+      priority: obj.priority,
+    };
+
+    const hasWildcards = /[\{\[\%\$]/.test(obj.title);
+    if (hasWildcards) {
+      const resolved = CaptureParser.resolveTitleWildcards(obj.title, combinedData, obj.title);
+      if (resolved) return resolved;
+    }
+
+    if (registeredCardTypeDef?.titleConfig) {
+      const { mode, fixedTitle, template } = registeredCardTypeDef.titleConfig;
+      const pattern = mode === 'fixed' ? fixedTitle : mode === 'template' ? template : undefined;
+      if (pattern && /[\{\[\%\$]/.test(pattern)) {
+        if (!obj.title || obj.title === pattern || hasWildcards) {
+          const resolved = CaptureParser.resolveTitleWildcards(
+            pattern,
+            combinedData,
+            obj.title || registeredCardTypeDef.name
+          );
+          if (resolved) return resolved;
+        }
+      }
+    }
+
+    return obj.title;
+  }, [obj.title, obj.attributes, obj.due_date, obj.assigned_to, obj.priority, registeredCardTypeDef]);
 
   const handleToggleCompleted = async () => {
     await updateObject(
@@ -240,7 +276,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   <div className="flex items-baseline justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        {obj.title}
+                        {displayTitle}
                       </h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {obj.attributes?.bank && (
@@ -263,7 +299,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                       </div>
                     )}
                   </div>
-                  {obj.description && obj.description !== obj.title && (
+                  {obj.description && obj.description !== displayTitle && (
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
                       {obj.description}
                     </p>
@@ -274,7 +310,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                      {obj.title}
+                      {displayTitle}
                     </h3>
                     {checklist.length > 0 && (
                       <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
@@ -376,7 +412,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                      {obj.title}
+                      {displayTitle}
                     </h3>
                   </div>
 
@@ -443,7 +479,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     })}
                   </div>
 
-                  {obj.description && obj.description !== obj.title && (
+                  {obj.description && obj.description !== displayTitle && (
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2">
                       {obj.description}
                     </p>
@@ -469,9 +505,9 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                         isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''
                       }`}
                     >
-                      {obj.title}
+                      {displayTitle}
                     </h3>
-                    {obj.description && obj.description !== obj.title && (
+                    {obj.description && obj.description !== displayTitle && (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
                         {obj.description}
                       </p>

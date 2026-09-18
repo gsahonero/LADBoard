@@ -660,6 +660,90 @@ export class CaptureParser {
     return entities;
   }
 
+  /**
+   * Resolves wildcard tokens (e.g. {bank}, {account_type}, [bank], %bank%, $bank)
+   * within a title pattern against provided field values or attributes.
+   */
+  static resolveTitleWildcards(
+    pattern: string,
+    values?: Record<string, any>,
+    fallback?: string
+  ): string {
+    if (!pattern || typeof pattern !== 'string') {
+      return fallback || '';
+    }
+
+    const data = values || {};
+
+    // Helper to find a value case-insensitively and normalized
+    const findValue = (token: string): any => {
+      const trimmed = token.trim();
+      if (!trimmed) return undefined;
+
+      // 1. Direct match
+      if (data[trimmed] !== undefined && data[trimmed] !== null && data[trimmed] !== '') {
+        return data[trimmed];
+      }
+
+      // 2. Case-insensitive key match
+      const lower = trimmed.toLowerCase();
+      for (const [k, v] of Object.entries(data)) {
+        if (k.toLowerCase() === lower && v !== undefined && v !== null && v !== '') {
+          return v;
+        }
+      }
+
+      // 3. Normalized key match (ignoring underscores, hyphens, and spaces)
+      const cleanToken = lower.replace(/[^a-z0-9]/g, '');
+      if (cleanToken) {
+        for (const [k, v] of Object.entries(data)) {
+          if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanToken && v !== undefined && v !== null && v !== '') {
+            return v;
+          }
+        }
+      }
+
+      return undefined;
+    };
+
+    // Replace {token}, ${token}, [token], %token%
+    let resolved = pattern.replace(/(?:\$\{([^{}]+)\}|\{([^{}]+)\}|\[([^\[\]]+)\]|%([^%]+)%)/g, (_, g1, g2, g3, g4) => {
+      const token = g1 || g2 || g3 || g4;
+      const val = findValue(token);
+      if (val !== undefined) {
+        if (Array.isArray(val)) {
+          return val
+            .map((item) => (typeof item === 'object' ? item.text || item.label || JSON.stringify(item) : String(item)))
+            .join(', ');
+        }
+        return String(val);
+      }
+      return '';
+    });
+
+    // Also support $word tokens (e.g. $bank) when word length >= 2
+    resolved = resolved.replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, word) => {
+      const val = findValue(word);
+      if (val !== undefined) {
+        return String(val);
+      }
+      return '';
+    });
+
+    // Clean up empty containers and formatting:
+    resolved = resolved.replace(/\(\s*\)/g, '');
+    resolved = resolved.replace(/\[\s*\]/g, '');
+    resolved = resolved.replace(/\s*([,:\-–—/])\s*(?=[,:\-–—/])/g, '');
+    resolved = resolved.replace(/\s+/g, ' ').trim();
+    resolved = resolved.replace(/^[-–—:,/]+|[-–—:,/]+$/g, '').trim();
+
+    if (resolved.length > 0) {
+      return resolved;
+    }
+
+    return fallback || '';
+  }
+
   static generateTitle(
     text: string,
     actions: string[],
@@ -670,24 +754,17 @@ export class CaptureParser {
     if (cardType?.titleConfig) {
       const { mode, fixedTitle, template } = cardType.titleConfig;
       if (mode === 'fixed') {
-        return fixedTitle?.trim() || cardType.name;
+        const raw = fixedTitle?.trim() || cardType.name;
+        const resolved = this.resolveTitleWildcards(raw, fields, cardType.name);
+        return resolved || cardType.name;
       }
       if (mode === 'input_text') {
         return text.trim();
       }
-      if (mode === 'template' && template) {
-        let interpolated = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
-          const val = fields?.[key];
-          if (val !== undefined && val !== null && String(val).trim() !== '') {
-            return String(val).trim();
-          }
-          return '';
-        });
-        interpolated = interpolated.replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').trim();
-        if (interpolated.length > 0) {
-          return interpolated;
-        }
-        return cardType.name;
+      if (mode === 'template') {
+        const raw = template?.trim() || cardType.name;
+        const resolved = this.resolveTitleWildcards(raw, fields, cardType.name);
+        return resolved || cardType.name;
       }
     }
 

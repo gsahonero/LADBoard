@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LADObject, LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { CaptureParser } from '../../core/objects/capture-parser';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
 import {
@@ -161,8 +162,14 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
         card_type: cardTypeId,
       };
 
+      const resolvedTitle = CaptureParser.resolveTitleWildcards(
+        title.trim(),
+        mergedAttributes,
+        title.trim()
+      );
+
       const patch: Partial<LADObject> = {
-        title: title.trim(),
+        title: resolvedTitle,
         description: description.trim(),
         domain: category,
         priority,

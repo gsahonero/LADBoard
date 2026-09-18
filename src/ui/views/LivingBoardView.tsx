@@ -3,9 +3,10 @@
  * Features active cards by category/timeline and a dedicated, searchable Archive section.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { fuzzyFilterObjects } from '../../core/utils/fuzzy-search';
 import { SmartCaptureBar } from '../components/SmartCaptureBar';
 import { AttentionCard } from '../components/AttentionCard';
 import { ObjectCard } from '../components/ObjectCard';
@@ -35,6 +36,7 @@ export const LivingBoardView: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [showArchive, setShowArchive] = useState<boolean>(false);
   const [archiveSearchQuery, setArchiveSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const domainFilters = [
     { id: 'all', label: t('boardView.allCategories'), icon: Sparkles },
@@ -49,25 +51,24 @@ export const LivingBoardView: React.FC = () => {
   const activeObjects = objects.filter((o) => o.status !== 'archived');
   const archivedObjects = objects.filter((o) => o.status === 'archived');
 
-  const filteredObjects = (showArchive ? archivedObjects : activeObjects).filter((o) => {
-    if (showArchive && archiveSearchQuery.trim()) {
-      const q = archiveSearchQuery.toLowerCase();
-      const matchTitle = o.title.toLowerCase().includes(q);
-      const matchDesc = (o.description || '').toLowerCase().includes(q);
-      const matchBank = (o.attributes?.bank || '').toLowerCase().includes(q);
-      const matchPatient = (o.attributes?.patient || '').toLowerCase().includes(q);
-      const matchTags = o.tags.some((t) => t.toLowerCase().includes(q));
-      if (!matchTitle && !matchDesc && !matchBank && !matchPatient && !matchTags) {
-        return false;
-      }
+  const filteredObjects = useMemo(() => {
+    if (showArchive) {
+      if (!archiveSearchQuery.trim()) return archivedObjects;
+      return fuzzyFilterObjects(archivedObjects, archiveSearchQuery);
     }
 
-    if (!showArchive) {
-      if (selectedDomain !== 'all' && o.domain !== selectedDomain) return false;
-      if (dateFilter && o.due_date !== dateFilter) return false;
+    let result = activeObjects;
+    if (selectedDomain !== 'all') {
+      result = result.filter((o) => o.domain === selectedDomain);
     }
-    return true;
-  });
+    if (dateFilter) {
+      result = result.filter((o) => o.due_date === dateFilter);
+    }
+    if (searchQuery.trim()) {
+      result = fuzzyFilterObjects(result, searchQuery);
+    }
+    return result;
+  }, [showArchive, archivedObjects, activeObjects, archiveSearchQuery, selectedDomain, dateFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -154,46 +155,72 @@ export const LivingBoardView: React.FC = () => {
         </div>
       )}
 
-      {/* 5. Navigation Bar: Category Pills & Archive Toggle */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-3">
+      {/* 5. Navigation Bar: Category Pills, Search Bar & Archive Toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200/80 dark:border-slate-800 pb-3" data-testid="categories-filter-bar">
         {!showArchive ? (
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-            {domainFilters.map((df) => {
-              const Icon = df.icon;
-              const isSelected = selectedDomain === df.id;
-              const count =
-                df.id === 'all'
-                  ? activeObjects.length
-                  : activeObjects.filter((o) => o.domain === df.id).length;
+          <>
+            <div className="flex flex-wrap items-center gap-1.5 py-0.5" data-testid="category-filter-buttons">
+              {domainFilters.map((df) => {
+                const Icon = df.icon;
+                const isSelected = selectedDomain === df.id;
+                const count =
+                  df.id === 'all'
+                    ? activeObjects.length
+                    : activeObjects.filter((o) => o.domain === df.id).length;
 
-              return (
-                <button
-                  key={df.id}
-                  onClick={() => {
-                    setSelectedDomain(df.id);
-                    setDateFilter(null);
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-                    isSelected
-                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{df.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                return (
+                  <button
+                    key={df.id}
+                    onClick={() => {
+                      setSelectedDomain(df.id);
+                      setDateFilter(null);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
                       isSelected
-                        ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50'
                     }`}
                   >
-                    {count}
-                  </span>
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{df.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isSelected
+                          ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Smart Space Board Search Bar */}
+            <div className="relative flex-1 min-w-[200px] max-w-xs sm:max-w-sm">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cards, banks, tags..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder:text-slate-400 shadow-sm transition-all"
+                data-testid="space-board-search-input"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full"
+                  data-testid="clear-search-button"
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          </>
         ) : (
           /* Archive Search Bar */
           <div className="relative flex-1 max-w-md">
@@ -251,8 +278,22 @@ export const LivingBoardView: React.FC = () => {
         <div className="p-10 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-2">
           <Sparkles className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {showArchive ? 'No archived items found.' : t('boardView.emptyCategory')}
+            {showArchive
+              ? 'No archived items found.'
+              : searchQuery.trim()
+              ? `No cards found matching "${searchQuery}".`
+              : t('boardView.emptyCategory')}
           </p>
+          {!showArchive && searchQuery.trim() && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 underline"
+              data-testid="empty-clear-search-button"
+            >
+              Clear search
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 items-start" data-testid="living-board-grid">

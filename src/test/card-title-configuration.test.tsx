@@ -5,6 +5,8 @@ import { SchemaRegistry } from '../core/schemas/schema-registry';
 import { LADCardTypeDefinition } from '../core/schemas/card-types';
 import { CardTypeEditorModal } from '../ui/components/CardTypeEditorModal';
 import { SmartCaptureBar } from '../ui/components/SmartCaptureBar';
+import { ObjectCard } from '../ui/components/ObjectCard';
+import { LADObject } from '../core/standard/types';
 import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADContext } from '../ui/context/LADContext';
 
@@ -269,6 +271,188 @@ describe('Configurable Card Type Title Behavior', () => {
       // The title input in finer details drawer should be 'Saldo'
       const titleInput = screen.getByTestId('finer-details-title-input') as HTMLInputElement;
       expect(titleInput.value).toBe('Saldo');
+    });
+  });
+
+  describe('Wildcards for Fixed Card Titles & Board Display', () => {
+    it('resolves wildcards in fixed title mode in CaptureParser', () => {
+      const fixedWithWildcard: LADCardTypeDefinition = {
+        id: 'finances.fixed_wildcard',
+        category: 'finances',
+        name: 'Account Overview',
+        fields: [
+          { key: 'bank', label: 'Bank', type: 'text' },
+          { key: 'account_type', label: 'Account Type', type: 'select', options: ['checking', 'savings'] },
+        ],
+        titleConfig: {
+          mode: 'fixed',
+          fixedTitle: 'Saldo {bank} - {account_type}',
+        },
+      };
+
+      const title = CaptureParser.generateTitle('test input', [], fixedWithWildcard, {
+        bank: 'Itaú',
+        account_type: 'checking',
+      });
+
+      expect(title).toBe('Saldo Itaú - checking');
+    });
+
+    it('cleans up missing wildcards without dangling braces in fixed title mode', () => {
+      const fixedWithWildcard: LADCardTypeDefinition = {
+        id: 'finances.fixed_wildcard',
+        category: 'finances',
+        name: 'Account Overview',
+        fields: [
+          { key: 'bank', label: 'Bank', type: 'text' },
+        ],
+        titleConfig: {
+          mode: 'fixed',
+          fixedTitle: 'Saldo {bank}',
+        },
+      };
+
+      // When bank is not provided
+      const title = CaptureParser.generateTitle('test input', [], fixedWithWildcard, {});
+      expect(title).toBe('Saldo');
+    });
+
+    it('supports multiple wildcard syntaxes and case-insensitivity in resolveTitleWildcards', () => {
+      const data = { bank_name: 'Chase', amount: 150 };
+
+      expect(CaptureParser.resolveTitleWildcards('Balance: {bank_name}', data)).toBe('Balance: Chase');
+      expect(CaptureParser.resolveTitleWildcards('Balance: {Bank_Name}', data)).toBe('Balance: Chase');
+      expect(CaptureParser.resolveTitleWildcards('Balance: [bank_name]', data)).toBe('Balance: Chase');
+      expect(CaptureParser.resolveTitleWildcards('Balance: %bank_name%', data)).toBe('Balance: Chase');
+      expect(CaptureParser.resolveTitleWildcards('Balance: $bank_name', data)).toBe('Balance: Chase');
+    });
+
+    it('interpolates wildcards on the board when displayed inside ObjectCard', () => {
+      const mockContext: any = {
+        updateObject: vi.fn(),
+        deleteObject: vi.fn(),
+      };
+
+      const cardObject: LADObject = {
+        object_id: 'card-wildcard-1',
+        space_id: 'space-1',
+        domain: 'finances',
+        title: 'Saldo {bank}',
+        status: 'active',
+        priority: 'medium',
+        created_by: 'usr-1',
+        attributes: {
+          card_type: 'finances.account_balance',
+          bank: 'Itaú',
+          balance: 72695,
+        },
+        tags: ['finances'],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+      };
+
+      render(
+        <I18nProvider initialLocale="en">
+          <LADContext.Provider value={mockContext}>
+            <ObjectCard obj={cardObject} />
+          </LADContext.Provider>
+        </I18nProvider>
+      );
+
+      // The board must display 'Saldo Itaú', NOT literal 'Saldo {bank}'
+      expect(screen.getByText('Saldo Itaú')).toBeInTheDocument();
+      expect(screen.queryByText('Saldo {bank}')).not.toBeInTheDocument();
+    });
+
+    it('cleans up wildcards on the board if the referenced field attribute is not set', () => {
+      const mockContext: any = {
+        updateObject: vi.fn(),
+        deleteObject: vi.fn(),
+      };
+
+      const cardObjectWithoutBank: LADObject = {
+        object_id: 'card-wildcard-2',
+        space_id: 'space-1',
+        domain: 'finances',
+        title: 'Saldo {bank}',
+        status: 'active',
+        priority: 'medium',
+        created_by: 'usr-1',
+        attributes: {
+          card_type: 'finances.account_balance',
+          balance: 500,
+        },
+        tags: ['finances'],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+      };
+
+      render(
+        <I18nProvider initialLocale="en">
+          <LADContext.Provider value={mockContext}>
+            <ObjectCard obj={cardObjectWithoutBank} />
+          </LADContext.Provider>
+        </I18nProvider>
+      );
+
+      // Should display 'Saldo' without any dangling '{bank}'
+      expect(screen.getByText('Saldo')).toBeInTheDocument();
+      expect(screen.queryByText('{bank}')).not.toBeInTheDocument();
+    });
+
+    it('allows inserting wildcard tokens into the Fixed Title input in CardTypeEditorModal', async () => {
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      const mockContext: any = {
+        activeManifest: { space_id: 'test-space', settings: {} },
+        updateSpaceIdentity: vi.fn().mockResolvedValue(undefined),
+      };
+
+      render(
+        <I18nProvider initialLocale="en">
+          <LADContext.Provider value={mockContext}>
+            <CardTypeEditorModal
+              isOpen={true}
+              onClose={onClose}
+              defaultCategory="finances"
+              onSaved={onSaved}
+            />
+          </LADContext.Provider>
+        </I18nProvider>
+      );
+
+      // Name card type
+      const nameInput = screen.getByTestId('card-type-name-input');
+      fireEvent.change(nameInput, { target: { value: 'Bank Balance Tracker' } });
+
+      // Switch to Fixed Title
+      const fixedModeBtn = screen.getByTestId('title-mode-fixed');
+      fireEvent.click(fixedModeBtn);
+
+      const fixedTitleInput = screen.getByTestId('card-type-fixed-title-input');
+      fireEvent.change(fixedTitleInput, { target: { value: 'Saldo' } });
+
+      // Click insert wildcard token button
+      const insertTitleTokenBtn = screen.getByTestId('insert-fixed-token-title');
+      fireEvent.click(insertTitleTokenBtn);
+
+      expect((fixedTitleInput as HTMLInputElement).value).toBe('Saldo {title}');
+
+      // Save
+      const saveBtn = screen.getByTestId('save-card-type-button');
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        expect(onSaved).toHaveBeenCalled();
+        const savedDefinition: LADCardTypeDefinition = onSaved.mock.calls[0][0];
+        expect(savedDefinition.titleConfig).toEqual({
+          mode: 'fixed',
+          fixedTitle: 'Saldo {title}',
+        });
+      });
     });
   });
 });

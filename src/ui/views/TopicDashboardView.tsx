@@ -171,7 +171,7 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
 
         {/* Tags / Subcategories */}
         {availableTags.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+          <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto pb-1 md:pb-0" data-testid="topic-subcategories-bar">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setSelectedTag('all')}

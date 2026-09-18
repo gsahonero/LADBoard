@@ -29,7 +29,7 @@ export const TimelineRibbon: React.FC<{
   }
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+    <div className="flex flex-wrap items-center gap-2 pb-1" data-testid="timeline-ribbon-bar">
       <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mr-1 whitespace-nowrap">
         <Calendar className="w-3.5 h-3.5" />
         <span>Timeline:</span>

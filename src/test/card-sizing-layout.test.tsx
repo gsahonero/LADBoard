@@ -145,4 +145,31 @@ describe('Card Sizing & Layout (No Wasted Space)', () => {
     expect(screen.getByText('Milk')).toBeInTheDocument();
     expect(screen.getByText('Itaú')).toBeInTheDocument();
   });
+
+  it('organizes category filter buttons with flex-wrap and no horizontal scroll bar in LivingBoardView', () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext}>
+          <LivingBoardView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    const filterBar = screen.getByTestId('categories-filter-bar');
+    expect(filterBar).toBeInTheDocument();
+    expect(filterBar.className).toContain('flex-wrap');
+    expect(filterBar.className).not.toContain('overflow-x-auto');
+    expect(filterBar.className).not.toContain('overflow-x-scroll');
+
+    const filterButtons = screen.getByTestId('category-filter-buttons');
+    expect(filterButtons).toBeInTheDocument();
+    expect(filterButtons.className).toContain('flex-wrap');
+    expect(filterButtons.className).not.toContain('overflow-x-auto');
+    expect(filterButtons.className).not.toContain('overflow-x-scroll');
+
+    const timelineBar = screen.getByTestId('timeline-ribbon-bar');
+    expect(timelineBar).toBeInTheDocument();
+    expect(timelineBar.className).toContain('flex-wrap');
+    expect(timelineBar.className).not.toContain('overflow-x-auto');
+  });
 });

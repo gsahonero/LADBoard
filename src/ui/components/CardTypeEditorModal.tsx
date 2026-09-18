@@ -420,7 +420,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 >
                   <div className="text-xs font-bold mb-0.5">Fixed Title</div>
                   <div className="text-[10px] text-slate-400 leading-tight">
-                    Always sets the exact same title (e.g. &quot;Saldo&quot;).
+                    Sets a standard title. Supports wildcards (e.g. &quot;Saldo &#123;bank&#125;&quot;).
                   </div>
                 </button>
 
@@ -443,19 +443,34 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
               </div>
 
               {titleMode === 'fixed' && (
-                <div className="pt-1">
+                <div className="pt-1 space-y-1.5">
                   <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">
-                    Fixed Title Text
+                    Fixed Title Text (Supports wildcards e.g. &#123;bank&#125;)
                   </label>
                   <input
                     type="text"
                     disabled={isDefault}
                     value={fixedTitle}
                     onChange={(e) => setFixedTitle(e.target.value)}
-                    placeholder="e.g. Saldo, Daily Log, Account Summary"
+                    placeholder="e.g. Saldo, Saldo {bank}, Daily Log"
                     className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60 font-medium"
                     data-testid="card-type-fixed-title-input"
                   />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-[9px] text-slate-400">Insert wildcard:</span>
+                    {fields.map((f) => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        disabled={isDefault}
+                        onClick={() => setFixedTitle((prev) => `${prev} {${f.key}}`.trim())}
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-lad-50 dark:hover:bg-lad-950/40 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                        data-testid={`insert-fixed-token-${f.key}`}
+                      >
+                        &#123;{f.key}&#125;
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
