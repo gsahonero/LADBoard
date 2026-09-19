@@ -66,8 +66,6 @@ export class GDriveStorageProvider implements IStorageProvider {
     const headers = await this.getAuthHeader();
     const mergedHeaders: Record<string, string> = {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
-      Pragma: 'no-cache',
-      Expires: '0',
       ...(headers as Record<string, string>),
       ...((init?.headers as Record<string, string>) || {}),
     };
