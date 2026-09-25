@@ -32,6 +32,7 @@ import {
   Square,
   Layers,
   Loader2,
+  History,
 } from 'lucide-react';
 
 interface CardEditModalProps {
@@ -722,6 +723,56 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none resize-none"
               />
             </div>
+
+            {/* 6. Version History Timeline */}
+            {obj.history && obj.history.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-edit-history-section">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <History className="w-3 h-3 text-lad-500" />
+                    <span>Card History & Progression ({obj.history.length})</span>
+                  </label>
+                </div>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {obj.history
+                    .slice()
+                    .reverse()
+                    .map((entry, idx) => {
+                      const dateObj = new Date(entry.timestamp);
+                      const dateStr = !isNaN(dateObj.getTime())
+                        ? dateObj.toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : entry.timestamp;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs border border-slate-200/60 dark:border-slate-700/60 space-y-0.5"
+                        >
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
+                              {entry.actor || 'User'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">{dateStr}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                            {entry.summary}
+                          </div>
+                          {entry.snapshot?.balance !== undefined && (
+                            <div className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              ${Number(entry.snapshot.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Interactive Progress Indicator Bar */}

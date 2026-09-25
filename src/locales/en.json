@@ -527,7 +527,12 @@
     "you": "You",
     "justNow": "Just now",
     "yesterday": "Yesterday",
-    "newBadge": "New"
+    "newBadge": "New",
+    "history": "History",
+    "historyTitle": "Card History",
+    "noHistory": "No previous updates recorded",
+    "uniqueState": "Unique State Entity",
+    "uniqueStateDesc": "Updates existing card & tracks history instead of duplicating"
   },
   "welcomeTour": {
     "quickTour": "Take a quick tour",

@@ -85,6 +85,8 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     description: 'Tracks current balance of a checking, savings, or investment account.',
     icon: 'CreditCard',
     isDefault: true,
+    isUniqueState: true,
+    uniqueKeyFields: ['bank'],
     fields: [
       {
         key: 'bank',

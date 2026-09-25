@@ -75,6 +75,8 @@ export interface LADCardTypeDefinition {
   isDefault?: boolean; // Immutable system default vs space custom type
   isSpaceCustomized?: boolean; // True when this space has customized this default card type
   overridesDefaultId?: string; // If this custom card type is a space-customized copy of a default card type
+  isUniqueState?: boolean; // When true, cards of this type represent a unique continuous state rather than duplicate cards (e.g. account/card balance for a bank)
+  uniqueKeyFields?: string[]; // Field keys that define entity uniqueness (e.g. ['bank'])
   fields: LADFieldDefinition[];
   titleConfig?: LADCardTitleConfig; // Configurable title behavior
   nlp?: LADCardNLPConfig;

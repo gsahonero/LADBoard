@@ -130,6 +130,14 @@ export interface LADGraph {
 
 export type LADObjectPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+export interface LADObjectHistoryEntry {
+  timestamp: string;
+  actor?: string;
+  summary: string;
+  changes?: Record<string, { from?: any; to: any }>;
+  snapshot?: Record<string, any>;
+}
+
 export interface LADObject {
   object_id: string; // "obj_..."
   space_id: string;
@@ -144,6 +152,7 @@ export interface LADObject {
   status: 'active' | 'completed' | 'archived' | 'pending';
   color?: string; // Optional custom card color preset (e.g. 'blue', 'emerald', 'amber', 'rose', 'purple', etc.)
   last_checked_at?: string; // for staleness tracking
+  history?: LADObjectHistoryEntry[]; // Versioned tracking history (especially for unique state cards)
   created_by: string;
   created_at: string;
   updated_at: string;

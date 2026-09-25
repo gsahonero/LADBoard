@@ -527,7 +527,12 @@
     "you": "Tú",
     "justNow": "Recién",
     "yesterday": "Ayer",
-    "newBadge": "Nuevo"
+    "newBadge": "Nuevo",
+    "history": "Historial",
+    "historyTitle": "Historial de la tarjeta",
+    "noHistory": "Sin actualizaciones previas registradas",
+    "uniqueState": "Entidad de estado único",
+    "uniqueStateDesc": "Actualiza la tarjeta existente y registra el historial en lugar de duplicarla"
   },
   "welcomeTour": {
     "quickTour": "Hacer un recorrido rápido",

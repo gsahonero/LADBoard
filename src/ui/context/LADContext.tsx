@@ -3,7 +3,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { LADUserRegistry, LADUserSpaceRef, LADSpaceManifest, LADSpaceSettings, LADObject, LADGraphNode, LADGraphEdge, LADOperation, LADActiveAlert } from '../../core/standard/types';
+import { LADUserRegistry, LADUserSpaceRef, LADSpaceManifest, LADSpaceSettings, LADObject, LADGraphNode, LADGraphEdge, LADOperation, LADActiveAlert, LADObjectHistoryEntry } from '../../core/standard/types';
 import { AuthService } from '../../core/identity/auth-service';
 import { AuthUser } from '../../core/identity/types';
 import { UserRegistryManager } from '../../core/identity/user-registry';
@@ -969,6 +969,136 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         mergedAttributes.card_type = structure.cardTypeId;
       }
 
+      const cardTypeDef = structure.cardTypeId
+        ? SchemaRegistry.getInstance().getCardType(structure.cardTypeId)
+        : undefined;
+
+      // Unique continuous state entity check (e.g. Account / Credit Card Balance for a bank)
+      if (cardTypeDef?.isUniqueState) {
+        const existingObjects = activeSpace.objectStore.getAll();
+        const existingCard = existingObjects.find((o) => {
+          if (o.status === 'archived') return false;
+          const oCardType = o.attributes?.card_type || (o.attributes as any)?.cardTypeId;
+          if (oCardType !== structure.cardTypeId) return false;
+
+          const keyFields = cardTypeDef.uniqueKeyFields?.length
+            ? cardTypeDef.uniqueKeyFields
+            : ['bank'];
+
+          for (const key of keyFields) {
+            const existingVal = String(o.attributes?.[key] || '').trim().toLowerCase();
+            const newVal = String(mergedAttributes[key] || '').trim().toLowerCase();
+            if (existingVal && newVal && existingVal === newVal) {
+              return true;
+            }
+          }
+
+          // Fallback to title matching if specific key fields were absent
+          if (o.title && structure.title) {
+            if (o.title.trim().toLowerCase() === structure.title.trim().toLowerCase()) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+        if (existingCard) {
+          const changes: Record<string, { from?: any; to: any }> = {};
+          for (const [k, v] of Object.entries(mergedAttributes)) {
+            if (existingCard.attributes?.[k] !== v) {
+              changes[k] = { from: existingCard.attributes?.[k], to: v };
+            }
+          }
+          if (structure.title && structure.title !== existingCard.title) {
+            changes['title'] = { from: existingCard.title, to: structure.title };
+          }
+
+          let summary = 'Updated card state';
+          if (changes.balance) {
+            const fromNum = Number(changes.balance.from);
+            const toNum = Number(changes.balance.to);
+            const fromStr = !isNaN(fromNum) ? `$${fromNum.toLocaleString()}` : String(changes.balance.from ?? 'none');
+            const toStr = !isNaN(toNum) ? `$${toNum.toLocaleString()}` : String(changes.balance.to ?? 'none');
+            summary = `Balance updated from ${fromStr} to ${toStr}`;
+          } else if (Object.keys(changes).length > 0) {
+            summary = `Updated ${Object.keys(changes).join(', ')}`;
+          }
+
+          const localIdentity = userRegistry?.identities?.[0];
+          const actorName = localIdentity?.display_name || userRegistry.user_id;
+
+          const historyEntry: LADObjectHistoryEntry = {
+            timestamp: new Date().toISOString(),
+            actor: actorName,
+            summary,
+            changes,
+            snapshot: {
+              title: structure.title || existingCard.title,
+              balance: mergedAttributes.balance ?? existingCard.attributes?.balance,
+              attributes: { ...existingCard.attributes, ...mergedAttributes },
+            },
+          };
+
+          const initialHistoryEntry: LADObjectHistoryEntry = {
+            timestamp: existingCard.created_at,
+            actor: existingCard.created_by,
+            summary: 'Initial state created',
+            snapshot: {
+              title: existingCard.title,
+              balance: existingCard.attributes?.balance,
+              attributes: { ...existingCard.attributes },
+            },
+          };
+
+          const updatedHistory = [
+            ...(existingCard.history && existingCard.history.length > 0
+              ? existingCard.history
+              : [initialHistoryEntry]),
+            historyEntry,
+          ];
+
+          const updatedCard: LADObject = {
+            ...existingCard,
+            title: structure.title || existingCard.title,
+            description: structure.rawText || existingCard.description,
+            attributes: {
+              ...existingCard.attributes,
+              ...mergedAttributes,
+            },
+            history: updatedHistory,
+            last_checked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            version: (existingCard.version || 1) + 1,
+          };
+
+          await activeSpace.objectStore.save(updatedCard);
+          await activeSpace.changeAggregator.commitImmediate({
+            targetId: existingCard.object_id,
+            type: 'object.update',
+            actor: userRegistry.user_id,
+            spaceId: activeSpace.manifest.space_id,
+            patch: updatedCard as any,
+          });
+
+          refreshSpaceState();
+          return updatedCard;
+        }
+      }
+
+      const initialHistory: LADObjectHistoryEntry[] = [
+        {
+          timestamp: new Date().toISOString(),
+          actor: userRegistry.identities[0]?.display_name || userRegistry.user_id,
+          summary: 'Created card',
+          snapshot: {
+            title: structure.title,
+            balance: mergedAttributes.balance,
+            attributes: { ...mergedAttributes },
+          },
+        },
+      ];
+
       const obj = activeSpace.objectStore.createObject({
         title: structure.title,
         description: structure.rawText,
@@ -980,6 +1110,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         attributes: mergedAttributes,
         actorUserId: userRegistry.user_id,
       });
+
+      obj.history = initialHistory;
 
       await activeSpace.objectStore.save(obj);
 
@@ -1035,7 +1167,67 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const existing = activeSpace.objectStore.get(objectId);
       if (!existing) return;
 
-      const updated = { ...existing, ...patch, updated_at: new Date().toISOString() };
+      let history = existing.history ? [...existing.history] : [];
+      if (patch.attributes || patch.title || patch.status) {
+        const changes: Record<string, { from?: any; to: any }> = {};
+        if (patch.attributes) {
+          for (const [k, v] of Object.entries(patch.attributes)) {
+            if (existing.attributes?.[k] !== v) {
+              changes[k] = { from: existing.attributes?.[k], to: v };
+            }
+          }
+        }
+        if (patch.title && patch.title !== existing.title) {
+          changes['title'] = { from: existing.title, to: patch.title };
+        }
+        if (patch.status && patch.status !== existing.status) {
+          changes['status'] = { from: existing.status, to: patch.status };
+        }
+
+        if (Object.keys(changes).length > 0) {
+          let summary = `Updated ${Object.keys(changes).join(', ')}`;
+          if (changes.balance) {
+            const fromNum = Number(changes.balance.from);
+            const toNum = Number(changes.balance.to);
+            const fromStr = !isNaN(fromNum) ? `$${fromNum.toLocaleString()}` : String(changes.balance.from ?? 'none');
+            const toStr = !isNaN(toNum) ? `$${toNum.toLocaleString()}` : String(changes.balance.to ?? 'none');
+            summary = `Balance updated from ${fromStr} to ${toStr}`;
+          }
+
+          if (history.length === 0) {
+            history.push({
+              timestamp: existing.created_at,
+              actor: existing.created_by,
+              summary: 'Initial state created',
+              snapshot: {
+                title: existing.title,
+                balance: existing.attributes?.balance,
+                attributes: { ...existing.attributes },
+              },
+            });
+          }
+
+          const localIdentity = userRegistry?.identities?.[0];
+          history.push({
+            timestamp: new Date().toISOString(),
+            actor: localIdentity?.display_name || userRegistry.user_id,
+            summary,
+            changes,
+            snapshot: {
+              title: patch.title || existing.title,
+              balance: patch.attributes?.balance ?? existing.attributes?.balance,
+              attributes: { ...existing.attributes, ...(patch.attributes || {}) },
+            },
+          });
+        }
+      }
+
+      const updated = {
+        ...existing,
+        ...patch,
+        history: patch.history || (history.length > 0 ? history : existing.history),
+        updated_at: new Date().toISOString(),
+      };
       await activeSpace.objectStore.save(updated);
 
       if (immediate) {

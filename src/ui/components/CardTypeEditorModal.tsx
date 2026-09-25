@@ -58,6 +58,8 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [keywordsStr, setKeywordsStr] = useState('');
   const [autoArchiveEnabled, setAutoArchiveEnabled] = useState<boolean>(false);
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(7);
+  const [isUniqueState, setIsUniqueState] = useState<boolean>(false);
+  const [uniqueKeyField, setUniqueKeyField] = useState<string>('');
   const [titleMode, setTitleMode] = useState<LADCardTitleMode>('input_text');
   const [fixedTitle, setFixedTitle] = useState('');
   const [titleTemplate, setTitleTemplate] = useState('');
@@ -76,6 +78,8 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setKeywordsStr(cardType.nlp?.keywords?.join(', ') || '');
       setAutoArchiveEnabled(cardType.lifecycle?.autoArchiveEnabled ?? false);
       setAutoArchiveDays(cardType.lifecycle?.autoArchiveDays || 7);
+      setIsUniqueState(cardType.isUniqueState ?? false);
+      setUniqueKeyField(cardType.uniqueKeyFields?.[0] || '');
       setTitleMode(cardType.titleConfig?.mode || 'input_text');
       setFixedTitle(cardType.titleConfig?.fixedTitle || '');
       setTitleTemplate(cardType.titleConfig?.template || '');
@@ -98,6 +102,8 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setKeywordsStr('');
       setAutoArchiveEnabled(false);
       setAutoArchiveDays(7);
+      setIsUniqueState(false);
+      setUniqueKeyField('');
       setTitleMode('input_text');
       setFixedTitle('');
       setTitleTemplate('');
@@ -256,6 +262,10 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
           autoArchiveEnabled,
           autoArchiveDays: Number(autoArchiveDays) || 7,
         },
+        isUniqueState,
+        uniqueKeyFields: isUniqueState
+          ? (uniqueKeyField ? [uniqueKeyField] : (fields[0]?.key ? [fields[0].key] : ['bank']))
+          : undefined,
       };
 
       if (isSpaceCustomizing) {
@@ -722,6 +732,52 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                       data-testid="card-type-auto-archive-days-input"
                     />
                     <span className="text-xs text-slate-500">days of inactivity</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Continuous State Entity & History Tracking */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block">
+                Continuous State & History Tracking
+              </span>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isUniqueState}
+                    onChange={(e) => setIsUniqueState(e.target.checked)}
+                    className="w-4 h-4 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                    data-testid="card-type-unique-state-toggle"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Unique State Entity (No Duplicates)
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight">
+                      When enabled, cards of this type represent a continuous state (e.g. credit card / bank balance). Capturing updates the existing card and logs balance history instead of creating duplicate cards.
+                    </span>
+                  </div>
+                </label>
+
+                {isUniqueState && fields.length > 0 && (
+                  <div className="pl-6 pt-1 flex items-center gap-3">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                      Identity field:
+                    </label>
+                    <select
+                      value={uniqueKeyField || fields[0]?.key}
+                      onChange={(e) => setUniqueKeyField(e.target.value)}
+                      className="text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium"
+                      data-testid="card-type-unique-field-select"
+                    >
+                      {fields.map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.label} ({f.key})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
