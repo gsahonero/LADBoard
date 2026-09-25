@@ -10,7 +10,7 @@ import { LADObject } from '../../core/standard/types';
 import { fuzzyFilterObjects } from '../../core/utils/fuzzy-search';
 
 export const ObjectsView: React.FC = () => {
-  const { objects, deleteObject, updateObject } = useLAD();
+  const { objects, deleteObject, updateObject, activeSpaceId, activeManifest } = useLAD();
   const { t } = useI18n();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,7 +18,11 @@ export const ObjectsView: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
-  const filtered = fuzzyFilterObjects(objects, searchQuery);
+  const effectiveSpaceId = activeSpaceId || activeManifest?.space_id;
+  const spaceObjects = effectiveSpaceId
+    ? objects.filter((o) => !o.space_id || o.space_id === effectiveSpaceId)
+    : objects;
+  const filtered = fuzzyFilterObjects(spaceObjects, searchQuery);
 
   const [editDueDate, setEditDueDate] = useState('');
 

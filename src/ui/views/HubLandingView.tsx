@@ -104,19 +104,40 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
     switchSpace(spaces[nextIdx].space_id);
   };
 
+  const effectiveSpaceId = activeSpaceId || activeManifest?.space_id;
+  const spaceObjects = useMemo(() => {
+    if (!effectiveSpaceId) return objects;
+    return objects.filter((o) => !o.space_id || o.space_id === effectiveSpaceId);
+  }, [objects, effectiveSpaceId]);
+
   const previewCards = useMemo(() => {
-    return [...objects]
+    return spaceObjects
+      .filter((o) => o.status !== 'archived')
       .sort((a, b) => {
+        const aFollowup = Boolean(a.attributes?.needs_followup || a.attributes?.followup?.date);
+        const bFollowup = Boolean(b.attributes?.needs_followup || b.attributes?.followup?.date);
+        if (aFollowup && !bFollowup) return -1;
+        if (!aFollowup && bFollowup) return 1;
+
+        const aCompleted = a.status === 'completed';
+        const bCompleted = b.status === 'completed';
+        if (!aCompleted && bCompleted) return -1;
+        if (aCompleted && !bCompleted) return 1;
+
         if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
         if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+
+        // Oldest items surface first so they don't get neglected
+        const aDate = new Date(a.last_checked_at || a.created_at).getTime();
+        const bDate = new Date(b.last_checked_at || b.created_at).getTime();
+        return aDate - bDate;
       })
       .slice(0, 3);
-  }, [objects]);
+  }, [spaceObjects]);
 
   const activeSpaceCategories = useMemo(() => {
-    return getSpaceCategories(activeManifest, objects);
-  }, [activeManifest, objects]);
+    return getSpaceCategories(activeManifest, spaceObjects);
+  }, [activeManifest, spaceObjects]);
 
   const getTopicIcon = (domain: string) => {
     return <ModernIcon name={domain} className="w-4 h-4 text-white/90 shrink-0" />;
@@ -395,9 +416,6 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
                       <Sparkles className="w-3 h-3 text-white/90" />
                       {t('hub.recentItems')}
                     </span>
-                    <span className="text-[10px] lowercase text-white/60">
-                      {previewCards.length} of {objects.length}
-                    </span>
                   </div>
 
                   <AnimatePresence mode="wait">
@@ -473,8 +491,7 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
                     <Layers className="w-4 h-4" />
                   </div>
                   <span className="text-xs text-white/90 font-medium">
-                    <strong className="text-white text-sm font-bold">{objects.length}</strong>{' '}
-                    {t('spaces.objectsCount', { count: objects.length })}
+                    {t('spaces.objectsCount', { count: spaceObjects.length })}
                   </span>
                 </div>
 
@@ -523,7 +540,7 @@ export const HubLandingView: React.FC<HubLandingViewProps> = ({
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 pt-1">
                     {activeSpaceCategories.map((catId) => {
                       const catMeta = getCategoryMeta(catId);
-                      const topicCount = objects.filter((o) => o.domain === catId).length;
+                      const topicCount = spaceObjects.filter((o) => o.domain === catId).length;
                       const shortDomainKey = `capture.domains.${catId}`;
                       const hasShortDomain = ['health', 'finances', 'documents', 'shopping', 'home', 'projects', 'general'].includes(catId.toLowerCase());
                       const displayLabel = hasShortDomain

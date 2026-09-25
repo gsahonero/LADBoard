@@ -218,8 +218,17 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         PaletteManager.applyPalette(registry.preferences.palette_theme as any);
       }
 
-      // Check if URL has ?join=spc_... or ?space=spc_...
-      let initialSpaceRef = registry.spaces[0];
+      // Check if URL has ?join=spc_... or ?space=spc_... or localStorage lad_active_space_id
+      let savedSpaceId: string | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          savedSpaceId = localStorage.getItem('lad_active_space_id');
+        } catch {
+          // Ignore
+        }
+      }
+
+      let initialSpaceRef = (savedSpaceId && registry.spaces.find((s) => s.space_id === savedSpaceId)) || registry.spaces[0];
       let initialSpaceId = initialSpaceRef?.space_id || 'spc_default';
       let initialSpaceName = initialSpaceRef?.space_name || 'Personal';
 
@@ -282,6 +291,13 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       if (!mounted) return;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('lad_active_space_id', initialSpaceId);
+        } catch {
+          // Ignore
+        }
+      }
       setActiveSpace(loaded);
       setObjects(loaded.objectStore.getAll());
       setNodes(loaded.graphStore.getNodes());
@@ -388,26 +404,38 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const switchSpace = useCallback(
     async (spaceId: string) => {
-      if (!spaceManager || !userRegistry) return;
+      if (!spaceManager) return;
 
-      // Flush any debounced pending edits on current space before switching
+      const currentRegistry = userRegistryManager?.getRegistry() || userRegistry;
+      if (!currentRegistry) return;
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('lad_active_space_id', spaceId);
+        } catch {
+          // Ignore
+        }
+      }
+
+      // Flush any debounced pending edits on current space before switching and stop its sync
       if (activeSpace) {
         try {
           await activeSpace.changeAggregator.flushAll();
+          activeSpace.syncCoordinator.stopPeriodicSync();
         } catch (e) {
           // ignore
         }
       }
 
-      const spaceRef = userRegistry.spaces.find((s) => s.space_id === spaceId);
+      const spaceRef = currentRegistry.spaces.find((s) => s.space_id === spaceId);
       const spaceName = spaceRef?.space_name || 'Personal';
       const loaded = await spaceManager.loadSpace(
         spaceId,
-        userRegistry.user_id,
-        userRegistry.preferences.change_commit_threshold_ms,
+        currentRegistry.user_id,
+        currentRegistry.preferences.change_commit_threshold_ms,
         spaceName,
-        userRegistry.identities[0]?.display_name,
-        userRegistry.identities[0]?.email
+        currentRegistry.identities[0]?.display_name,
+        currentRegistry.identities[0]?.email
       );
 
       // Ensure remote storage is wired to the switched space
@@ -428,9 +456,11 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // Trigger a silent background sync for the switched space to pull remote changes
       if (storageManager.getRemoteProvider()) {
         loaded.syncCoordinator.triggerSync({ silent: true }).then(() => {
-          setObjects(loaded.objectStore.getAll());
-          setNodes(loaded.graphStore.getNodes());
-          setEdges(loaded.graphStore.getEdges());
+          if (loaded.manifest.space_id === spaceId) {
+            setObjects(loaded.objectStore.getAll());
+            setNodes(loaded.graphStore.getNodes());
+            setEdges(loaded.graphStore.getEdges());
+          }
         }).catch((err) => {
           console.debug('[LAD:Context] Space switch sync:', err);
         });
@@ -438,7 +468,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       TelemetryBus.getInstance().record('user_interaction', 'space_switched', { spaceId });
     },
-    [spaceManager, userRegistry, activeSpace, storageManager]
+    [spaceManager, userRegistryManager, userRegistry, activeSpace, storageManager]
   );
 
   const createSpace = useCallback(
@@ -449,14 +479,17 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       color?: string,
       categories?: string[]
     ) => {
-      if (!spaceManager || !userRegistry || !userRegistryManager) return;
+      if (!spaceManager || !userRegistryManager) return;
+      const currentRegistry = userRegistryManager.getRegistry() || userRegistry;
+      if (!currentRegistry) return;
+
       const manifest = await spaceManager.createSpace({
         spaceName: name,
         description,
         icon,
         color,
         categories,
-        createdByUserId: userRegistry.user_id,
+        createdByUserId: currentRegistry.user_id,
       });
 
       const auth = authService.getState();
@@ -478,14 +511,22 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
 
       await userRegistryManager.addSpace(newRef);
-      setUserRegistry({ ...userRegistryManager.getRegistry()! });
+      const updatedReg = userRegistryManager.getRegistry()!;
+      setUserRegistry({ ...updatedReg });
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('lad_active_space_id', manifest.space_id);
+        } catch {
+          // Ignore
+        }
+      }
       await switchSpace(manifest.space_id);
 
       // If GDrive has been set up, sync to GDrive by default; if it fails, fall back to local sync
       if (isGoogle) {
         try {
           console.log(`[LAD:Context] Defaulting to GDrive sync for new space "${manifest.space_id}"...`);
-          await spaceManager.repairAndUploadSpaceToRemote(manifest.space_id, userRegistry.user_id);
+          await spaceManager.repairAndUploadSpaceToRemote(manifest.space_id, currentRegistry.user_id);
         } catch (err) {
           console.warn('[LAD:Context] Initial GDrive upload failed, falling back to local sync:', err);
           await userRegistryManager.addSpace({
@@ -496,7 +537,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
     },
-    [spaceManager, userRegistry, userRegistryManager, switchSpace, authService, storageManager]
+    [spaceManager, userRegistryManager, userRegistry, switchSpace, authService, storageManager]
   );
 
   const updateSpaceIdentity = useCallback(

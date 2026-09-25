@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
 import { useNavigationGuard } from '../context/NavigationGuardContext';
@@ -61,6 +62,24 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
   const [isRepairingDrive, setIsRepairingDrive] = useState(false);
   const [repairResultMsg, setRepairResultMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const topSaveRef = useRef<HTMLButtonElement | null>(null);
+  const [isFloatingSave, setIsFloatingSave] = useState(false);
+
+  useEffect(() => {
+    const target = topSaveRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsFloatingSave(!entry.isIntersecting);
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     PaletteManager.applyPalette(currentPalette);
@@ -228,8 +247,8 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
         </div>
       </div>
 
-      {/* Sticky Header Bar with Persistent Save & Reminder - Visible At All Times & Floating as page scrolls */}
-      <div className="sticky top-[53px] sm:top-[57px] z-20 -mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Primary Header Bar with Save & Reminder */}
+      <div className="-mx-2 px-3 sm:px-5 py-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-xl bg-lad-50 dark:bg-lad-950/40 text-lad-600 dark:text-lad-400 shrink-0">
             <Settings className="w-5 h-5" />
@@ -259,6 +278,7 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
           <button
+            ref={topSaveRef}
             type="button"
             onClick={handleSaveSettings}
             disabled={isSaving}
@@ -526,32 +546,6 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
         </div>
       </div>
 
-      {/* Save Button Bar (Bottom) */}
-      <div className="flex justify-end pt-2">
-        <button
-          type="button"
-          onClick={handleSaveSettings}
-          disabled={isSaving}
-          className={`px-6 py-2.5 text-xs font-bold rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 ${
-            hasChanges
-              ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-md shadow-lad-500/20'
-              : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
-          }`}
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>{t('settings.saving')}</span>
-            </>
-          ) : (
-            <>
-              <Check className="w-3.5 h-3.5" />
-              <span>{t('settings.saveSettings')}</span>
-            </>
-          )}
-        </button>
-      </div>
-
       {/* Danger Zone: Delete Account & Erase All Data */}
       <div className="p-6 bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 rounded-3xl space-y-4 mt-6">
         <div>
@@ -640,6 +634,46 @@ export const GlobalSettingsView: React.FC<GlobalSettingsViewProps> = ({ onSwitch
           </div>
         </div>
       )}
+
+      {/* Floating Save Action Button when scrolled down past primary save button */}
+      <AnimatePresence>
+        {isFloatingSave && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 right-6 z-40"
+          >
+            <button
+              type="button"
+              onClick={handleSaveSettings}
+              disabled={isSaving}
+              aria-label={t('settings.saveSettings')}
+              className={`px-5 py-3 text-xs font-bold rounded-2xl shadow-xl transition-all cursor-pointer flex items-center gap-2 backdrop-blur-md ${
+                hasChanges
+                  ? 'text-white bg-lad-600 hover:bg-lad-700 active:scale-95 shadow-lad-500/30 ring-2 ring-lad-400'
+                  : 'text-slate-800 dark:text-white bg-white/95 dark:bg-slate-800/95 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{t('settings.saving')}</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>{t('settings.saveSettings')}</span>
+                  {hasChanges && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" />
+                  )}
+                </>
+              )}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

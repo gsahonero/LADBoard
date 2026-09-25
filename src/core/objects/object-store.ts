@@ -35,7 +35,10 @@ export class ObjectStore {
         if (obj) {
           try {
             validateLADObject(obj);
-            this.objects.set(obj.object_id, obj);
+            if (!obj.space_id || obj.space_id === this.spaceId) {
+              if (!obj.space_id) obj.space_id = this.spaceId;
+              this.objects.set(obj.object_id, obj);
+            }
           } catch {
             // Skip invalid object
           }
@@ -45,9 +48,11 @@ export class ObjectStore {
   }
 
   getAll(): LADObject[] {
-    return Array.from(this.objects.values()).sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    return Array.from(this.objects.values())
+      .filter((o) => !o.space_id || o.space_id === this.spaceId)
+      .sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
   }
 
   get(objectId: string): LADObject | undefined {
@@ -63,6 +68,9 @@ export class ObjectStore {
   }
 
   async save(obj: LADObject): Promise<void> {
+    if (!obj.space_id) {
+      obj.space_id = this.spaceId;
+    }
     validateLADObject(obj);
     obj.updated_at = new Date().toISOString();
     this.objects.set(obj.object_id, obj);

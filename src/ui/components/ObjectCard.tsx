@@ -23,10 +23,69 @@ import {
   Edit2,
   Clock,
   RotateCcw,
+  Palette,
+  ChevronDown,
 } from 'lucide-react';
 
+export const CARD_COLOR_PRESETS: Record<string, { border: string; bg: string; dot: string; badge: string }> = {
+  blue: {
+    border: 'border-blue-300 dark:border-blue-700/80 hover:border-blue-400',
+    bg: 'bg-blue-50/30 dark:bg-blue-950/20',
+    dot: 'bg-blue-500',
+    badge: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+  },
+  emerald: {
+    border: 'border-emerald-300 dark:border-emerald-700/80 hover:border-emerald-400',
+    bg: 'bg-emerald-50/30 dark:bg-emerald-950/20',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+  },
+  amber: {
+    border: 'border-amber-300 dark:border-amber-700/80 hover:border-amber-400',
+    bg: 'bg-amber-50/30 dark:bg-amber-950/20',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+  },
+  rose: {
+    border: 'border-rose-300 dark:border-rose-700/80 hover:border-rose-400',
+    bg: 'bg-rose-50/30 dark:bg-rose-950/20',
+    dot: 'bg-rose-500',
+    badge: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+  },
+  purple: {
+    border: 'border-purple-300 dark:border-purple-700/80 hover:border-purple-400',
+    bg: 'bg-purple-50/30 dark:bg-purple-950/20',
+    dot: 'bg-purple-500',
+    badge: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+  },
+  indigo: {
+    border: 'border-indigo-300 dark:border-indigo-700/80 hover:border-indigo-400',
+    bg: 'bg-indigo-50/30 dark:bg-indigo-950/20',
+    dot: 'bg-indigo-500',
+    badge: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+  },
+  cyan: {
+    border: 'border-cyan-300 dark:border-cyan-700/80 hover:border-cyan-400',
+    bg: 'bg-cyan-50/30 dark:bg-cyan-950/20',
+    dot: 'bg-cyan-500',
+    badge: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
+  },
+  orange: {
+    border: 'border-orange-300 dark:border-orange-700/80 hover:border-orange-400',
+    bg: 'bg-orange-50/30 dark:bg-orange-950/20',
+    dot: 'bg-orange-500',
+    badge: 'bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800',
+  },
+  slate: {
+    border: 'border-slate-300 dark:border-slate-700 hover:border-slate-400',
+    bg: 'bg-slate-50/40 dark:bg-slate-900/40',
+    dot: 'bg-slate-400',
+    badge: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200',
+  },
+};
+
 export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
-  const { updateObject, deleteObject, nodes, userRegistry } = useLAD();
+  const { updateObject, deleteObject, nodes, userRegistry, activeManifest } = useLAD();
   const { t } = useI18n();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -191,6 +250,33 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
     );
   };
 
+  const [isRecategorizeOpen, setIsRecategorizeOpen] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+
+  const cardColor = obj.color || obj.attributes?.color;
+  const colorPreset = cardColor ? CARD_COLOR_PRESETS[cardColor] : null;
+
+  const availableCategories = useMemo(() => {
+    const list: string[] = ['health', 'finances', 'shopping', 'home', 'documents', 'projects', 'general'];
+    if (activeManifest?.categories) {
+      for (const c of activeManifest.categories) {
+        if (!list.includes(c)) list.push(c);
+      }
+    }
+    return list;
+  }, [activeManifest]);
+
+  const handleRecategorize = async (newDomain: string) => {
+    setIsRecategorizeOpen(false);
+    if (newDomain === obj.domain) return;
+    await updateObject(obj.object_id, { domain: newDomain }, true);
+  };
+
+  const handleSetColor = async (newColor: string | null) => {
+    setIsColorPickerOpen(false);
+    await updateObject(obj.object_id, { color: newColor || undefined }, true);
+  };
+
   const handleToggleChecklistItem = async (index: number) => {
     const updated = [...checklist];
     if (updated[index]) {
@@ -270,7 +356,11 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
     <>
       <motion.div
         whileHover={{ y: -2, transition: { duration: 0.2 } }}
-        className={`p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-sm transition-shadow hover:shadow-md ${style.border} flex flex-col justify-between space-y-3 h-fit w-full break-inside-avoid group ${
+        className={`p-4 ${
+          colorPreset
+            ? `${colorPreset.bg} ${colorPreset.border}`
+            : `bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 ${style.border}`
+        } rounded-2xl shadow-sm transition-all hover:shadow-md flex flex-col justify-between space-y-3 h-fit w-full break-inside-avoid group ${
           isCompleted ? 'opacity-65 bg-slate-50/60 dark:bg-slate-950/60' : ''
         } ${isArchived ? 'opacity-75 border-dashed border-slate-300 dark:border-slate-700' : ''}`}
         data-testid={`card-${obj.object_id}`}
@@ -279,12 +369,51 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
           {/* Top Meta Bar */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize ${style.badge}`}
-              >
-                {style.icon}
-                <span>{t(`capture.domains.${obj.domain}`) || obj.domain}</span>
-              </span>
+              {/* Interactive Recategorize Badge */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsRecategorizeOpen((prev) => !prev);
+                    setIsColorPickerOpen(false);
+                  }}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize transition-all cursor-pointer hover:shadow-xs ${
+                    colorPreset?.badge || style.badge
+                  }`}
+                  title={t('card.recategorize') || 'Recategorize'}
+                >
+                  {style.icon}
+                  <span>{t(`capture.domains.${obj.domain}`) || obj.domain}</span>
+                  <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                </button>
+
+                {isRecategorizeOpen && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute left-0 top-full mt-1 z-30 w-44 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-1.5 space-y-0.5 text-xs animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    <div className="px-2 py-1 text-[9px] font-bold uppercase text-slate-400">
+                      {t('card.recategorize') || 'Recategorize'}
+                    </div>
+                    {availableCategories.map((catId) => (
+                      <button
+                        key={catId}
+                        type="button"
+                        onClick={() => handleRecategorize(catId)}
+                        className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-left transition-colors cursor-pointer capitalize ${
+                          obj.domain === catId
+                            ? 'bg-lad-50 dark:bg-lad-950/40 text-lad-700 dark:text-lad-300 font-bold'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span>{t(`capture.domains.${catId}`) || catId}</span>
+                        {obj.domain === catId && <span className="text-lad-600 dark:text-lad-400">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {cardType === 'finances.account_balance' && (
                 <span className="text-[10px] font-semibold px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800">
@@ -350,6 +479,39 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   </motion.button>
                 ) : (
                   <>
+                    {/* Quick Color Picker */}
+                    <div className="relative">
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsColorPickerOpen((prev) => !prev);
+                          setIsRecategorizeOpen(false);
+                        }}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded cursor-pointer"
+                        title={t('card.cardColor') || 'Card Color'}
+                      >
+                        <Palette className="w-3.5 h-3.5" />
+                      </motion.button>
+                      {isColorPickerOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-full mt-1 z-30 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 flex items-center gap-1.5"
+                        >
+                          {['blue', 'emerald', 'amber', 'rose', 'purple', 'cyan', 'indigo', 'orange'].map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => handleSetColor(cardColor === c ? null : c)}
+                              className={`w-4 h-4 rounded-full transition-transform hover:scale-125 cursor-pointer ${
+                                CARD_COLOR_PRESETS[c].dot
+                              } ${cardColor === c ? 'ring-2 ring-offset-1 ring-slate-800 dark:ring-white scale-110' : ''}`}
+                              title={c}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => setIsEditModalOpen(true)}
@@ -674,9 +836,9 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   <span
                     className="truncate"
                     data-testid={`card-creator-${obj.object_id}`}
-                    title={`Created by ${creatorDisplay}`}
+                    title={t('card.createdBy', { name: creatorDisplay }) || `Created by ${creatorDisplay}`}
                   >
-                    {t('card.createdBy') || 'Created by'}{' '}
+                    {t('card.createdPrefix') || 'Created by'}{' '}
                     <strong className="font-semibold text-slate-600 dark:text-slate-300">
                       {creatorDisplay}
                     </strong>

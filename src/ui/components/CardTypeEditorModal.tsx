@@ -56,6 +56,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [category, setCategory] = useState(defaultCategory);
   const [description, setDescription] = useState('');
   const [keywordsStr, setKeywordsStr] = useState('');
+  const [autoArchiveEnabled, setAutoArchiveEnabled] = useState<boolean>(false);
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(7);
   const [titleMode, setTitleMode] = useState<LADCardTitleMode>('input_text');
   const [fixedTitle, setFixedTitle] = useState('');
@@ -73,6 +74,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setCategory(cardType.category);
       setDescription(cardType.description || '');
       setKeywordsStr(cardType.nlp?.keywords?.join(', ') || '');
+      setAutoArchiveEnabled(cardType.lifecycle?.autoArchiveEnabled ?? false);
       setAutoArchiveDays(cardType.lifecycle?.autoArchiveDays || 7);
       setTitleMode(cardType.titleConfig?.mode || 'input_text');
       setFixedTitle(cardType.titleConfig?.fixedTitle || '');
@@ -94,6 +96,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setCategory(defaultCategory);
       setDescription('');
       setKeywordsStr('');
+      setAutoArchiveEnabled(false);
       setAutoArchiveDays(7);
       setTitleMode('input_text');
       setFixedTitle('');
@@ -108,6 +111,15 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   }, [cardType, defaultCategory, isOpen]);
 
   if (!isOpen) return null;
+
+  const slugify = (text: string, fallback: string) => {
+    const slug = text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return slug || fallback;
+  };
 
   const handleAddField = () => {
     const newIdx = fields.length + 1;
@@ -138,11 +150,13 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
 
   const handleFieldChange = (index: number, patch: Partial<LADFieldDefinition>) => {
     const updated = [...fields];
-    updated[index] = { ...updated[index], ...patch };
-    // Auto-slugify key from label if key was default
-    if (patch.label && updated[index].key.startsWith('field_')) {
-      updated[index].key = patch.label.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const prevField = updated[index];
+    const nextField = { ...prevField, ...patch };
+    // Automatically infer key from label
+    if (patch.label !== undefined) {
+      nextField.key = slugify(patch.label, `field_${index + 1}`);
     }
+    updated[index] = nextField;
     setFields(updated);
   };
 
@@ -239,6 +253,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
           keywords: keywords.length > 0 ? keywords : [name.toLowerCase()],
         },
         lifecycle: {
+          autoArchiveEnabled,
           autoArchiveDays: Number(autoArchiveDays) || 7,
         },
       };
@@ -556,28 +571,22 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                     key={idx}
                     className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2"
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
-                          Field Label
-                        </label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block">
+                            Field Label
+                          </label>
+                          <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500">
+                            Key: {field.key}
+                          </span>
+                        </div>
                         <input
                           type="text"
                           value={field.label}
                           onChange={(e) => handleFieldChange(idx, { label: e.target.value })}
+                          placeholder="e.g. Field Name"
                           className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
-                          Field Key (Identifier)
-                        </label>
-                        <input
-                          type="text"
-                          value={field.key}
-                          onChange={(e) => handleFieldChange(idx, { key: e.target.value })}
-                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
                         />
                       </div>
 
@@ -671,6 +680,50 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Lifecycle & Ambient Automation */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block">
+                Lifecycle & Ambient Automation
+              </span>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoArchiveEnabled}
+                    onChange={(e) => setAutoArchiveEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                    data-testid="card-type-auto-archive-toggle"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Enable Auto-Archive for this Card Type
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight">
+                      When enabled, passive cards of this type without active alerts or future follow-ups will automatically transition to Archive.
+                    </span>
+                  </div>
+                </label>
+
+                {autoArchiveEnabled && (
+                  <div className="pl-6 pt-1 flex items-center gap-3">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                      Archive passive cards after
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={autoArchiveDays}
+                      onChange={(e) => setAutoArchiveDays(Math.max(1, parseInt(e.target.value) || 7))}
+                      className="w-16 text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-center"
+                      data-testid="card-type-auto-archive-days-input"
+                    />
+                    <span className="text-xs text-slate-500">days of inactivity</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

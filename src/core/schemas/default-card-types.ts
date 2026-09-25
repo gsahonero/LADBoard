@@ -124,6 +124,7 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
       template: '{bank} Balance',
     },
     lifecycle: {
+      autoArchiveEnabled: true,
       autoArchiveDays: 7,
       hasFollowup: false,
     },
@@ -180,6 +181,7 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
       mode: 'input_text',
     },
     lifecycle: {
+      autoArchiveEnabled: true,
       autoArchiveDays: 14,
       hasFollowup: false,
     },
@@ -315,6 +317,7 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
       mode: 'input_text',
     },
     lifecycle: {
+      autoArchiveEnabled: false,
       autoArchiveDays: 14,
       hasFollowup: false,
     },

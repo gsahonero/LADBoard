@@ -142,6 +142,7 @@ export interface LADObject {
   assigned_to?: string; // user_id or node_id
   priority: LADObjectPriority;
   status: 'active' | 'completed' | 'archived' | 'pending';
+  color?: string; // Optional custom card color preset (e.g. 'blue', 'emerald', 'amber', 'rose', 'purple', etc.)
   last_checked_at?: string; // for staleness tracking
   created_by: string;
   created_at: string;

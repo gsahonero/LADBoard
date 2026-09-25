@@ -47,6 +47,7 @@ export interface OnItsWayActionOption {
 }
 
 export interface LADCardLifecycleConfig {
+  autoArchiveEnabled?: boolean; // Whether auto-archive is enabled for this card type
   autoArchiveDays?: number; // Days before passive card transitions to Archive (defaults to space setting)
   hasFollowup?: boolean;
   onItsWayActions?: OnItsWayActionOption[];

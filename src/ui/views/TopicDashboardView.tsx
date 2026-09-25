@@ -45,7 +45,7 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
   onOpenCapture,
 }) => {
   const { t } = useI18n();
-  const { objects, activeManifest } = useLAD();
+  const { objects, activeManifest, activeSpaceId } = useLAD();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -54,10 +54,11 @@ export const TopicDashboardView: React.FC<TopicDashboardViewProps> = ({
   const meta = getCategoryMeta(topicId);
   const topicTitle = meta.labelKey ? t(meta.labelKey) : (meta.label || topicId);
 
-  // Filter objects for this topic
+  const effectiveSpaceId = activeSpaceId || activeManifest?.space_id;
+  // Filter objects for this topic and active space
   const topicObjects = useMemo(() => {
-    return objects.filter((o) => o.domain === topicId);
-  }, [objects, topicId]);
+    return objects.filter((o) => o.domain === topicId && (!effectiveSpaceId || !o.space_id || o.space_id === effectiveSpaceId));
+  }, [objects, topicId, effectiveSpaceId]);
 
   // Extract unique tags/subcategories
   const availableTags = useMemo(() => {

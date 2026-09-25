@@ -6,6 +6,7 @@
 
 import { LADActiveAlert, LADObject } from '../standard/types';
 import { ActiveTriggerRule } from './types';
+import { SchemaRegistry } from '../schemas/schema-registry';
 
 export class ActiveEngine {
   public readonly spaceId: string;
@@ -210,19 +211,25 @@ export class ActiveEngine {
       }
 
       // 2. Non-destructive Auto-Archival for Passive Cards without active attention alerts
+      // Auto-archive must be explicitly enabled per card type definition
+      const cardTypeId = obj.attributes?.card_type;
+      const cardTypeDef = cardTypeId ? SchemaRegistry.getInstance().getCardType(cardTypeId) : undefined;
+      const isAutoArchiveEnabled = cardTypeDef?.lifecycle?.autoArchiveEnabled ?? false;
+
       const isPassive =
         !obj.due_date &&
         !obj.attributes?.followup?.date &&
         !obj.attributes?.needs_followup;
 
-      if (isPassive && !hasActiveAlert && obj.status === 'active') {
+      if (isAutoArchiveEnabled && isPassive && !hasActiveAlert && obj.status === 'active') {
         const checkDate = obj.last_checked_at
           ? new Date(obj.last_checked_at)
           : new Date(obj.updated_at || obj.created_at);
         const diffMs = referenceDate.getTime() - checkDate.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const thresholdDays = cardTypeDef?.lifecycle?.autoArchiveDays ?? autoArchiveDays;
 
-        if (diffDays >= autoArchiveDays) {
+        if (diffDays >= thresholdDays) {
           obj.status = 'archived';
           obj.updated_at = referenceDate.toISOString();
         }

@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export const LivingBoardView: React.FC = () => {
-  const { objects, activeAlerts, proposals, approveProposal, rejectProposal } = useLAD();
+  const { objects, activeAlerts, proposals, approveProposal, rejectProposal, activeSpaceId, activeManifest } = useLAD();
   const { t } = useI18n();
 
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
@@ -75,8 +75,14 @@ export const LivingBoardView: React.FC = () => {
     { id: 'projects', label: t('capture.domains.projects') || 'Projects', icon: Briefcase, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800' },
   ];
 
-  const activeObjects = objects.filter((o) => o.status !== 'archived');
-  const archivedObjects = objects.filter((o) => o.status === 'archived');
+  const effectiveSpaceId = activeSpaceId || activeManifest?.space_id;
+  const spaceObjects = useMemo(() => {
+    if (!effectiveSpaceId) return objects;
+    return objects.filter((o) => !o.space_id || o.space_id === effectiveSpaceId);
+  }, [objects, effectiveSpaceId]);
+
+  const activeObjects = spaceObjects.filter((o) => o.status !== 'archived');
+  const archivedObjects = spaceObjects.filter((o) => o.status === 'archived');
 
   const stackCategories = useMemo(() => {
     if (selectedDomain !== 'all') {

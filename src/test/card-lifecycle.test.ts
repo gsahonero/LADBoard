@@ -62,6 +62,35 @@ describe('Card Ambient Lifecycle & Auto-Archival', () => {
     expect(passiveRecentCard.status).toBe('active');
   });
 
+  it('does not auto-archive passive cards if the card type has autoArchiveEnabled: false', () => {
+    const engine = new ActiveEngine('spc_test');
+    const eightDaysAgo = new Date(refDate.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString();
+
+    const noteCard: LADObject = {
+      object_id: 'obj_note_01',
+      space_id: 'spc_test',
+      title: 'Important Philosophy Note',
+      domain: 'general',
+      tags: ['general'],
+      attributes: {
+        card_type: 'general.note',
+        content: 'Knowledge preservation test',
+      },
+      priority: 'low',
+      status: 'active',
+      created_by: 'usr_1',
+      created_at: eightDaysAgo,
+      updated_at: eightDaysAgo,
+      last_checked_at: eightDaysAgo,
+      version: 1,
+    };
+
+    engine.evaluateObjects([noteCard], refDate, 7);
+
+    // Note card has autoArchiveEnabled = false (or undefined) in schema, so it remains active
+    expect(noteCard.status).toBe('active');
+  });
+
   it('keeps actionable cards with follow-up dormant until the target date arrives', () => {
     const engine = new ActiveEngine('spc_test');
 

@@ -4,7 +4,7 @@
  * and all specific dynamic fields defined by its schema (select with spaces, numbers, currency, checklist, etc.).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LADObject, LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
@@ -41,12 +41,13 @@ interface CardEditModalProps {
 }
 
 export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, obj }) => {
-  const { updateObject } = useLAD();
+  const { updateObject, activeManifest } = useLAD();
   const { t } = useI18n();
   const registry = SchemaRegistry.getInstance();
 
   const [category, setCategory] = useState<string>(obj.domain || 'general');
   const [cardTypeId, setCardTypeId] = useState<string | undefined>(obj.attributes?.card_type);
+  const [color, setColor] = useState<string>(obj.color || obj.attributes?.color || 'default');
   const [title, setTitle] = useState(obj.title);
   const [description, setDescription] = useState(obj.description || '');
   const [priority, setPriority] = useState<LADObjectPriority>(obj.priority || 'medium');
@@ -72,6 +73,7 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
       : typesForCat[0]?.id;
 
     setCardTypeId(initialTypeId);
+    setColor(obj.color || obj.attributes?.color || 'default');
     setTitle(obj.title);
     setDescription(obj.description || '');
     setPriority(obj.priority || 'medium');
@@ -82,9 +84,28 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
     setError(null);
   }, [isOpen, obj]);
 
+  const categories = useMemo(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+    if (activeManifest?.categories) {
+      for (const catId of activeManifest.categories) {
+        if (!seen.has(catId)) {
+          seen.add(catId);
+          list.push({ id: catId, name: t(`capture.domains.${catId}`) || catId });
+        }
+      }
+    }
+    for (const c of registry.getAllCategories()) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        list.push({ id: c.id, name: t(`capture.domains.${c.id}`) || c.name });
+      }
+    }
+    return list;
+  }, [activeManifest, registry, t]);
+
   if (!isOpen) return null;
 
-  const categories = registry.getAllCategories();
   const availableCardTypes = registry.getCardTypesForCategory(category);
   const activeCardTypeDef: LADCardTypeDefinition | undefined = cardTypeId
     ? registry.getCardType(cardTypeId)
@@ -175,6 +196,7 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
         priority,
         due_date: dueDate.trim() || undefined,
         assigned_to: assignedTo.trim() || undefined,
+        color: color !== 'default' ? color : undefined,
         attributes: mergedAttributes,
       };
 
@@ -275,6 +297,40 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Card Color Customization */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                {t('card.cardColor') || 'Card Color'}
+              </label>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { id: 'default', label: 'Default', bg: 'bg-slate-300 dark:bg-slate-600' },
+                  { id: 'blue', label: 'Blue', bg: 'bg-blue-500' },
+                  { id: 'emerald', label: 'Emerald', bg: 'bg-emerald-500' },
+                  { id: 'amber', label: 'Amber', bg: 'bg-amber-500' },
+                  { id: 'rose', label: 'Rose', bg: 'bg-rose-500' },
+                  { id: 'purple', label: 'Purple', bg: 'bg-purple-500' },
+                  { id: 'cyan', label: 'Cyan', bg: 'bg-cyan-500' },
+                  { id: 'indigo', label: 'Indigo', bg: 'bg-indigo-500' },
+                  { id: 'orange', label: 'Orange', bg: 'bg-orange-500' },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setColor(c.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      color === c.id
+                        ? 'border-slate-800 dark:border-white ring-2 ring-slate-800/20 dark:ring-white/20 bg-slate-100 dark:bg-slate-800'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full ${c.bg}`} />
+                    <span className="capitalize">{c.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
