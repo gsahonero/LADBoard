@@ -8,7 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LADObject, LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
 import { CaptureParser } from '../../core/objects/capture-parser';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
@@ -111,6 +111,7 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
   const activeCardTypeDef: LADCardTypeDefinition | undefined = cardTypeId
     ? registry.getCardType(cardTypeId)
     : availableCardTypes[0];
+  const noNotes = isNotesStorageDisabled(activeCardTypeDef);
 
   const handleCategoryChange = (newCat: string) => {
     setCategory(newCat);
@@ -184,6 +185,12 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
         card_type: cardTypeId,
       };
 
+      if (noNotes) {
+        delete mergedAttributes.raw_thought;
+        delete mergedAttributes.raw_text;
+        delete mergedAttributes.rawText;
+      }
+
       const resolvedTitle = CaptureParser.resolveTitleWildcards(
         title.trim(),
         mergedAttributes,
@@ -192,7 +199,7 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
 
       const patch: Partial<LADObject> = {
         title: resolvedTitle,
-        description: description.trim(),
+        description: noNotes ? '' : description.trim(),
         domain: category,
         priority,
         due_date: dueDate.trim() || undefined,
@@ -711,18 +718,21 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
             )}
 
             {/* 5. Notes / Description */}
-            <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Notes / Raw Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Additional notes, comments, or thought..."
-                rows={2}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none resize-none"
-              />
-            </div>
+            {!noNotes && (
+              <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-edit-notes-section">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Notes / Raw Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Additional notes, comments, or thought..."
+                  rows={2}
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none resize-none"
+                  data-testid="card-edit-description-input"
+                />
+              </div>
+            )}
 
             {/* 6. Version History Timeline */}
             {obj.history && obj.history.length > 0 && (

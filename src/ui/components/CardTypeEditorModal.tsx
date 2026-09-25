@@ -11,6 +11,7 @@ import {
   LADFieldType,
   LADCardTitleMode,
   LADCardTitleConfig,
+  isNotesStorageDisabled,
 } from '../../core/schemas/card-types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import { useLAD } from '../context/LADContext';
@@ -60,6 +61,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [autoArchiveDays, setAutoArchiveDays] = useState<number>(7);
   const [isUniqueState, setIsUniqueState] = useState<boolean>(false);
   const [uniqueKeyField, setUniqueKeyField] = useState<string>('');
+  const [noNotesStored, setNoNotesStored] = useState<boolean>(false);
   const [titleMode, setTitleMode] = useState<LADCardTitleMode>('input_text');
   const [fixedTitle, setFixedTitle] = useState('');
   const [titleTemplate, setTitleTemplate] = useState('');
@@ -80,6 +82,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setAutoArchiveDays(cardType.lifecycle?.autoArchiveDays || 7);
       setIsUniqueState(cardType.isUniqueState ?? false);
       setUniqueKeyField(cardType.uniqueKeyFields?.[0] || '');
+      setNoNotesStored(isNotesStorageDisabled(cardType));
       setTitleMode(cardType.titleConfig?.mode || 'input_text');
       setFixedTitle(cardType.titleConfig?.fixedTitle || '');
       setTitleTemplate(cardType.titleConfig?.template || '');
@@ -105,6 +108,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setAutoArchiveDays(7);
       setIsUniqueState(false);
       setUniqueKeyField('');
+      setNoNotesStored(false);
       setTitleMode('input_text');
       setFixedTitle('');
       setTitleTemplate('');
@@ -268,6 +272,8 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         uniqueKeyFields: isUniqueState
           ? (uniqueKeyField ? [uniqueKeyField] : (fields[0]?.key ? [fields[0].key] : ['bank']))
           : undefined,
+        storeNotes: !noNotesStored,
+        noNotesStored,
       };
 
       if (isSpaceCustomizing) {
@@ -801,6 +807,32 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                     </select>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Notes & Raw Description Storage Option */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block">
+                Notes & Raw Description Storage
+              </span>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noNotesStored}
+                    onChange={(e) => setNoNotesStored(e.target.checked)}
+                    className="w-4 h-4 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                    data-testid="card-type-no-notes-toggle"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Do Not Store Notes / Raw Description
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight">
+                      When enabled, cards created or updated with this card type will not store notes or the raw input text in their description.
+                    </span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>

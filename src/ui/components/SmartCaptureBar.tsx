@@ -10,7 +10,7 @@ import { CaptureParser } from '../../core/objects/capture-parser';
 import { InferredStructure } from '../../core/objects/types';
 import { LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
 import { CardInferenceConfirmModal } from './CardInferenceConfirmModal';
 import {
   Sparkles,
@@ -99,11 +99,17 @@ export const SmartCaptureBar: React.FC = () => {
       ...fieldOverrides,
     };
 
+    const effectiveCardTypeId = overrideCardTypeId || inferred?.cardTypeId;
+    const cardTypeDef = effectiveCardTypeId
+      ? SchemaRegistry.getInstance().getCardType(effectiveCardTypeId)
+      : undefined;
+    const noNotes = isNotesStorageDisabled(cardTypeDef);
+
     return {
       rawText: input,
       title: overrideTitle.trim() || inferred?.title || input.trim(),
       domain: overrideDomain || inferred?.domain || 'general',
-      cardTypeId: overrideCardTypeId || inferred?.cardTypeId,
+      cardTypeId: effectiveCardTypeId,
       priority: overridePriority || inferred?.priority || 'medium',
       dueDate: overrideDate || inferred?.dueDate || mergedFieldValues.due_date,
       assignedTo: overrideAssignee || inferred?.assignedTo || mergedFieldValues.patient,
@@ -112,7 +118,7 @@ export const SmartCaptureBar: React.FC = () => {
       extractedEntities: inferred?.extractedEntities || [],
       suggestedAttributes: {
         ...(inferred?.suggestedAttributes || {}),
-        raw_thought: input,
+        ...(noNotes ? {} : { raw_thought: input }),
         ...mergedFieldValues,
       },
       fieldValues: mergedFieldValues,

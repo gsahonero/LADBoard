@@ -22,6 +22,7 @@ import {
   getShareableJoinUrl,
 } from '../../core/sharing/google-sharing-service';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
+import { isNotesStorageDisabled } from '../../core/schemas/card-types';
 
 export interface LADContextType {
   // Identity & Auth
@@ -969,9 +970,18 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         mergedAttributes.card_type = structure.cardTypeId;
       }
 
-      const cardTypeDef = structure.cardTypeId
-        ? SchemaRegistry.getInstance().getCardType(structure.cardTypeId)
+      const cardTypeId = structure.cardTypeId || structure.suggestedAttributes?.card_type;
+      const cardTypeDef = cardTypeId
+        ? SchemaRegistry.getInstance().getCardType(cardTypeId)
         : undefined;
+
+      const noNotes = isNotesStorageDisabled(cardTypeDef);
+
+      if (noNotes) {
+        delete mergedAttributes.raw_thought;
+        delete mergedAttributes.raw_text;
+        delete mergedAttributes.rawText;
+      }
 
       // Unique continuous state entity check (e.g. Account / Credit Card Balance for a bank)
       if (cardTypeDef?.isUniqueState) {
@@ -1061,7 +1071,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const updatedCard: LADObject = {
             ...existingCard,
             title: structure.title || existingCard.title,
-            description: structure.rawText || existingCard.description,
+            description: noNotes ? '' : (structure.rawText || existingCard.description),
             attributes: {
               ...existingCard.attributes,
               ...mergedAttributes,
@@ -1101,7 +1111,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const obj = activeSpace.objectStore.createObject({
         title: structure.title,
-        description: structure.rawText,
+        description: noNotes ? '' : structure.rawText,
         domain: structure.domain,
         tags: structure.tags,
         priority: structure.priority,

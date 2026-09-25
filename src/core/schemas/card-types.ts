@@ -78,10 +78,25 @@ export interface LADCardTypeDefinition {
   overridesDefaultId?: string; // If this custom card type is a space-customized copy of a default card type
   isUniqueState?: boolean; // When true, cards of this type represent a unique continuous state rather than duplicate cards (e.g. account/card balance for a bank)
   uniqueKeyFields?: string[]; // Field keys that define entity uniqueness (e.g. ['bank'])
+  storeNotes?: boolean; // When false, no notes/raw description is stored for cards of this type (defaults to true)
+  noNotesStored?: boolean; // Optional alias: when true, no notes/raw description is stored for cards of this type
   fields: LADFieldDefinition[];
   titleConfig?: LADCardTitleConfig; // Configurable title behavior
   nlp?: LADCardNLPConfig;
   lifecycle?: LADCardLifecycleConfig;
+}
+
+/**
+ * Checks whether storage of notes and raw description is disabled for a given card type.
+ * Optional behavior: returns true if storeNotes is false, noNotesStored is true, or storeRawDescription is false.
+ */
+export function isNotesStorageDisabled(cardType?: LADCardTypeDefinition | null): boolean {
+  if (!cardType) return false;
+  return Boolean(
+    cardType.storeNotes === false ||
+    cardType.noNotesStored === true ||
+    (cardType as any).storeRawDescription === false
+  );
 }
 
 export interface LADCategoryDefinition {

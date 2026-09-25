@@ -6,7 +6,7 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { OnItsWayModal } from './OnItsWayModal';
 import { CardEditModal } from './CardEditModal';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADFieldDefinition } from '../../core/schemas/card-types';
+import { LADFieldDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
 import { CaptureParser } from '../../core/objects/capture-parser';
 import {
   Heart,
@@ -129,6 +129,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const isArchived = obj.status === 'archived';
   const cardType = obj.attributes?.card_type;
   const registeredCardTypeDef = cardType ? SchemaRegistry.getInstance().getCardType(cardType) : undefined;
+  const noNotes = isNotesStorageDisabled(registeredCardTypeDef);
   const checklist: Array<{ id: string; text: string; completed: boolean }> =
     obj.attributes?.checklist || [];
   const followup = obj.attributes?.followup;
@@ -784,8 +785,8 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                       </div>
                     )}
                   </div>
-                  {obj.description && obj.description !== displayTitle && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                  {obj.description && obj.description !== displayTitle && !noNotes && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1" data-testid="card-description">
                       {renderTextWithShortUrls(obj.description)}
                     </p>
                   )}
@@ -1082,8 +1083,8 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     })}
                   </div>
 
-                  {obj.description && obj.description !== displayTitle && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2">
+                  {obj.description && obj.description !== displayTitle && !noNotes && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2" data-testid="card-description">
                       {renderTextWithShortUrls(obj.description)}
                     </p>
                   )}
@@ -1110,8 +1111,8 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     >
                       {displayTitle}
                     </h3>
-                    {obj.description && obj.description !== displayTitle && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                    {obj.description && obj.description !== displayTitle && !noNotes && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2" data-testid="card-description">
                         {renderTextWithShortUrls(obj.description)}
                       </p>
                     )}

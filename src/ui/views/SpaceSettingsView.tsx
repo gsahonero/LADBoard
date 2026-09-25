@@ -32,7 +32,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADCardTypeDefinition } from '../../core/schemas/card-types';
+import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
 import { CardTypeEditorModal } from '../components/CardTypeEditorModal';
 
 
@@ -755,6 +755,14 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                       >
                         {ct.isSpaceCustomized ? 'Customized Default' : ct.isDefault ? 'Default' : 'Custom'}
                       </span>
+                      {isNotesStorageDisabled(ct) && (
+                        <span
+                          className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"
+                          data-testid={`card-type-no-notes-badge-${ct.id}`}
+                        >
+                          No Notes
+                        </span>
+                      )}
                     </div>
                     {ct.description && (
                       <p className="text-[11px] text-slate-500 line-clamp-1">
