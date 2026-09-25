@@ -18,8 +18,20 @@ export class ConflictResolver {
       return null;
     }
 
-    const localKeys = Object.keys(localOp.patch);
-    const remoteKeys = Object.keys(remoteOp.patch);
+    const SYSTEM_METADATA_KEYS = new Set([
+      'updated_at',
+      'created_at',
+      'created_by',
+      'version',
+      'last_checked_at',
+      'timestamp',
+      'lamport_clock',
+      'object_id',
+      'space_id',
+    ]);
+
+    const localKeys = Object.keys(localOp.patch).filter((k) => !SYSTEM_METADATA_KEYS.has(k));
+    const remoteKeys = Object.keys(remoteOp.patch).filter((k) => !SYSTEM_METADATA_KEYS.has(k));
     const overlappingKeys = localKeys.filter((k) => remoteKeys.includes(k));
 
     // Check if the overlapping values actually differ

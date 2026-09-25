@@ -188,12 +188,20 @@ export class SyncCoordinator {
         await remoteOpLog.loadAll();
 
         const remoteOps = remoteOpLog.getOperations();
+        const localKnownOpIds = new Set(this.operationLog.getOperations().map((o) => o.operation_id));
+        const newRemoteOps = remoteOps.filter((ro) => !localKnownOpIds.has(ro.operation_id));
 
         for (const localOp of pendingOps) {
-          // Check for conflicts against recent remote ops
-          const conflictingRemote = remoteOps.find(
-            (ro) => ro.target === localOp.target && ro.actor !== localOp.actor
-          );
+          // If this target already has an unresolved active conflict, skip pushing
+          if (this.state.activeConflicts.some((c) => c.targetId === localOp.target && !c.resolved)) {
+            continue;
+          }
+
+          // Check for conflicts ONLY against unseen (new) remote operations
+          const conflictingRemote = newRemoteOps
+            .slice()
+            .reverse()
+            .find((ro) => ro.target === localOp.target && ro.actor !== localOp.actor);
 
           if (conflictingRemote) {
             const targetObj = this.objectStore?.get(localOp.target);
@@ -299,7 +307,7 @@ export class SyncCoordinator {
                 status: 'conflict_detected',
                 activeConflicts: this.state.activeConflicts,
               });
-              await this.operationLog.append(newOp);
+              // Do not mark conflicting remote operation as applied to local operationLog until resolved
               continue;
             }
           }
@@ -585,6 +593,11 @@ export class SyncCoordinator {
       }
       // Remove conflicting local operation
       await this.offlineQueue.remove(localOp.operation_id);
+    }
+
+    // Ensure resolved remoteOp is recorded in local operation log so it is not treated as an unhandled new remote op
+    if (!this.operationLog.getOperations().some((o) => o.operation_id === remoteOp.operation_id)) {
+      await this.operationLog.append(remoteOp);
     }
 
     // Filter out resolved conflict

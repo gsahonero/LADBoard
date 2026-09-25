@@ -473,4 +473,142 @@ describe('Conflict Solver Dialogue & Resolution Engine', () => {
     fireEvent.click(badgeButton);
     expect(mockOpenConflictModal).toHaveBeenCalled();
   });
+
+  it('pushes local updates to remote without false conflicts against antecedent operations', async () => {
+    const localStorage = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+    const spaceManager = new SpaceManager(localStorage, remoteStorage);
+
+    // 1. Space and card created by owner/creator
+    const space = await spaceManager.createSpace({
+      spaceName: 'Collab Space',
+      createdByUserId: 'usr_creator_owner',
+    });
+    const loaded = await spaceManager.loadSpace(space.space_id, 'usr_creator_owner');
+
+    const card = loaded.objectStore.createObject({
+      title: 'Original Bank Card',
+      domain: 'finances',
+      actorUserId: 'usr_creator_owner',
+      attributes: { balance: 1000 },
+    });
+    await loaded.objectStore.save(card);
+    await loaded.changeAggregator.commitImmediate({
+      targetId: card.object_id,
+      type: 'object.create',
+      actor: 'usr_creator_owner',
+      spaceId: space.space_id,
+      patch: card as any,
+    });
+
+    // Initial sync pushes card and creation op to remote
+    await loaded.syncCoordinator.triggerSync();
+    expect(loaded.syncCoordinator.getState().status).toBe('synced');
+    expect(loaded.syncCoordinator.getState().activeConflicts.length).toBe(0);
+
+    // 2. Local user (different actor, e.g. editor or on another device) updates the card
+    const updatedCard = {
+      ...card,
+      title: 'Updated Bank Card Title',
+      attributes: { ...card.attributes, balance: 2500 },
+      updated_at: new Date().toISOString(),
+    };
+    await loaded.objectStore.save(updatedCard);
+    await loaded.changeAggregator.commitImmediate({
+      targetId: card.object_id,
+      type: 'object.update',
+      actor: 'usr_local_editor',
+      spaceId: space.space_id,
+      patch: { title: 'Updated Bank Card Title', balance: 2500 },
+    });
+
+    // 3. Trigger sync from local copy to remote
+    // Must NOT raise a false conflict against the antecedent creation op
+    await loaded.syncCoordinator.triggerSync();
+
+    expect(loaded.syncCoordinator.getState().status).toBe('synced');
+    expect(loaded.syncCoordinator.getState().activeConflicts.length).toBe(0);
+
+    // Verify remote received the update
+    const remoteObj = await remoteStorage.readFile<LADObject>(
+      `LAD/${space.space_id}/objects/${card.object_id}.json`
+    );
+    expect(remoteObj?.title).toBe('Updated Bank Card Title');
+  });
+
+  it('detects genuine concurrent conflicts when unseen remote operations collide with pending updates', async () => {
+    const localStorageA = new MemoryStorageProvider();
+    const localStorageB = new MemoryStorageProvider();
+    const remoteStorage = new MemoryStorageProvider();
+
+    const spaceManagerA = new SpaceManager(localStorageA, remoteStorage);
+    const spaceManagerB = new SpaceManager(localStorageB, remoteStorage);
+
+    // 1. Initial shared space setup
+    const space = await spaceManagerA.createSpace({
+      spaceName: 'Team Project',
+      createdByUserId: 'usr_alice',
+    });
+    const loadedA = await spaceManagerA.loadSpace(space.space_id, 'usr_alice');
+
+    const card = loadedA.objectStore.createObject({
+      title: 'Base Task',
+      domain: 'tasks',
+      actorUserId: 'usr_alice',
+      attributes: { priority: 'low' },
+    });
+    await loadedA.objectStore.save(card);
+    await loadedA.changeAggregator.commitImmediate({
+      targetId: card.object_id,
+      type: 'object.create',
+      actor: 'usr_alice',
+      spaceId: space.space_id,
+      patch: card as any,
+    });
+    await loadedA.syncCoordinator.triggerSync();
+
+    // 2. User B joins / replicates space
+    const loadedB = await spaceManagerB.loadSpace(space.space_id, 'usr_bob');
+    await loadedB.syncCoordinator.triggerSync();
+    expect(loadedB.objectStore.get(card.object_id)?.title).toBe('Base Task');
+
+    // 3. User A modifies task remotely while B is offline
+    await loadedA.changeAggregator.commitImmediate({
+      targetId: card.object_id,
+      type: 'object.update',
+      actor: 'usr_alice',
+      spaceId: space.space_id,
+      patch: { title: 'Alice Concurrent Title' },
+    });
+    await loadedA.syncCoordinator.triggerSync();
+
+    // 4. User B concurrently modifies the same task locally
+    await loadedB.changeAggregator.commitImmediate({
+      targetId: card.object_id,
+      type: 'object.update',
+      actor: 'usr_bob',
+      spaceId: space.space_id,
+      patch: { title: 'Bob Offline Title' },
+    });
+
+    // 5. User B triggers sync — genuine conflict must be detected!
+    await loadedB.syncCoordinator.triggerSync();
+
+    expect(loadedB.syncCoordinator.getState().status).toBe('conflict_detected');
+    expect(loadedB.syncCoordinator.getState().activeConflicts.length).toBe(1);
+    const activeConflict = loadedB.syncCoordinator.getState().activeConflicts[0];
+    expect(activeConflict.targetId).toBe(card.object_id);
+    expect(activeConflict.conflictingKeys).toContain('title');
+
+    // 6. User B resolves with keep_local
+    await loadedB.syncCoordinator.resolveConflict(activeConflict.conflictId, 'keep_local');
+    expect(loadedB.syncCoordinator.getState().status).toBe('synced');
+    expect(loadedB.syncCoordinator.getState().activeConflicts.length).toBe(0);
+
+    // 7. Subsequent sync remains cleanly synced
+    await loadedB.syncCoordinator.triggerSync();
+    expect(loadedB.syncCoordinator.getState().status).toBe('synced');
+    expect(loadedB.syncCoordinator.getState().activeConflicts.length).toBe(0);
+  });
 });
+

@@ -85,6 +85,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setTitleTemplate(cardType.titleConfig?.template || '');
       const initialFields = cardType.fields.map((f) => ({
         ...f,
+        quickEdit: f.quickEdit ?? false,
         options: f.options ? [...f.options] : undefined,
       }));
       setFields(initialFields);
@@ -136,6 +137,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         label: `Field ${newIdx}`,
         type: 'text',
         required: false,
+        quickEdit: false,
       },
     ]);
   };
@@ -634,6 +636,25 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                           </button>
                         )}
                       </div>
+                    </div>
+
+                    {/* Quick Editor Configuration */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(field.quickEdit)}
+                          onChange={(e) => handleFieldChange(idx, { quickEdit: e.target.checked })}
+                          className="w-3.5 h-3.5 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                          data-testid={`field-quick-edit-checkbox-${idx}`}
+                        />
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          Allow quick editor on card
+                        </span>
+                      </label>
+                      <span className="text-[10px] text-slate-400 hidden sm:inline">
+                        Edit value directly on the card without full modal
+                      </span>
                     </div>
 
                     {/* Options for Select fields */}

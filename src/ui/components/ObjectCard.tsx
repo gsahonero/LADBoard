@@ -6,6 +6,7 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { OnItsWayModal } from './OnItsWayModal';
 import { CardEditModal } from './CardEditModal';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
+import { LADFieldDefinition } from '../../core/schemas/card-types';
 import { CaptureParser } from '../../core/objects/capture-parser';
 import {
   Heart,
@@ -21,6 +22,9 @@ import {
   Square,
   Trash2,
   Edit2,
+  Edit3,
+  Check,
+  X,
   Clock,
   RotateCcw,
   Palette,
@@ -130,6 +134,66 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const followup = obj.attributes?.followup;
 
   const [showHistory, setShowHistory] = useState(false);
+
+  // Quick editor state & handlers
+  const [quickEditingField, setQuickEditingField] = useState<string | null>(null);
+  const [quickEditValue, setQuickEditValue] = useState<any>('');
+
+  const balanceFieldDef: LADFieldDefinition = useMemo(() => {
+    return (
+      registeredCardTypeDef?.fields.find((f) => f.key === 'balance') || {
+        key: 'balance',
+        label: 'Balance',
+        type: 'currency',
+        quickEdit: true,
+      }
+    );
+  }, [registeredCardTypeDef]);
+
+  const isBalanceQuickEditable = balanceFieldDef.quickEdit !== false;
+
+  const startQuickEdit = (e: React.MouseEvent, fieldKey: string, initialVal: any) => {
+    e.stopPropagation();
+    setQuickEditingField(fieldKey);
+    setQuickEditValue(initialVal ?? '');
+  };
+
+  const cancelQuickEdit = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setQuickEditingField(null);
+  };
+
+  const handleSaveQuickEdit = async (
+    e: React.MouseEvent | React.FormEvent | React.KeyboardEvent,
+    field: LADFieldDefinition
+  ) => {
+    e.stopPropagation();
+    if ('preventDefault' in e) e.preventDefault();
+
+    let finalVal: any = quickEditValue;
+    if (field.type === 'currency' || field.type === 'number') {
+      const cleaned = String(quickEditValue).replace(/[^0-9.-]/g, '');
+      const num = Number(cleaned);
+      finalVal = isNaN(num) ? 0 : num;
+    } else if (field.type === 'boolean') {
+      finalVal = Boolean(quickEditValue);
+    }
+
+    const newAttributes = {
+      ...(obj.attributes || {}),
+      [field.key]: finalVal,
+    };
+
+    await updateObject(
+      obj.object_id,
+      {
+        attributes: newAttributes,
+      },
+      true
+    );
+
+    setQuickEditingField(null);
+  };
 
   // Resolves creator display name from userRegistry or graph nodes
   const creatorDisplay = useMemo(() => {
@@ -651,9 +715,72 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     </div>
                     {obj.attributes?.balance !== undefined && (
                       <div className="text-right">
-                        <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-                          ${Number(obj.attributes.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
+                        {quickEditingField === 'balance' ? (
+                          <div
+                            className="flex items-center gap-1.5 justify-end"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid="quick-editor-container-balance"
+                          >
+                            <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">$</span>
+                            <input
+                              type="number"
+                              step="any"
+                              autoFocus
+                              value={quickEditValue}
+                              onChange={(e) => setQuickEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveQuickEdit(e, balanceFieldDef);
+                                if (e.key === 'Escape') cancelQuickEdit();
+                              }}
+                              className="w-28 px-2 py-0.5 text-sm font-bold rounded-lg border border-emerald-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              data-testid="quick-editor-input-balance"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => handleSaveQuickEdit(e, balanceFieldDef)}
+                              className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-md cursor-pointer transition-colors"
+                              title="Save balance"
+                              data-testid="quick-editor-save-balance"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelQuickEdit}
+                              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md cursor-pointer transition-colors"
+                              title="Cancel"
+                              data-testid="quick-editor-cancel-balance"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="group/balance flex items-center justify-end gap-1.5">
+                            <span
+                              className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 cursor-pointer hover:underline"
+                              onClick={(e) => {
+                                if (isBalanceQuickEditable) {
+                                  startQuickEdit(e, 'balance', obj.attributes?.balance);
+                                }
+                              }}
+                              title={isBalanceQuickEditable ? 'Click to quick edit balance' : undefined}
+                              data-testid={`card-balance-display-${obj.object_id}`}
+                            >
+                              ${Number(obj.attributes.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </span>
+                            {isBalanceQuickEditable && (
+                              <button
+                                type="button"
+                                onClick={(e) => startQuickEdit(e, 'balance', obj.attributes?.balance)}
+                                className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors opacity-70 group-hover/balance:opacity-100 cursor-pointer"
+                                title="Quick edit balance"
+                                data-testid="quick-edit-trigger-balance"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -779,7 +906,91 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     {registeredCardTypeDef.fields.map((field) => {
                       if (field.key === 'title') return null;
                       const val = obj.attributes?.[field.key];
-                      if (val === undefined || val === '' || val === null) return null;
+                      const isQuickEditable = Boolean(field.quickEdit);
+                      const isCurrentlyEditing = quickEditingField === field.key;
+
+                      if (!isQuickEditable && (val === undefined || val === '' || val === null)) {
+                        return null;
+                      }
+
+                      if (isCurrentlyEditing) {
+                        return (
+                          <div
+                            key={field.key}
+                            className="col-span-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-lad-500/50 shadow-xs space-y-1.5"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`quick-editor-container-${field.key}`}
+                          >
+                            <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 block">
+                              Quick Edit: {field.label}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {field.type === 'currency' && (
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">$</span>
+                              )}
+                              {field.type === 'select' ? (
+                                <select
+                                  autoFocus
+                                  value={quickEditValue}
+                                  onChange={(e) => setQuickEditValue(e.target.value)}
+                                  className="flex-1 text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                  data-testid={`quick-editor-input-${field.key}`}
+                                >
+                                  {(field.options || []).map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : field.type === 'boolean' ? (
+                                <label className="flex items-center gap-1.5 flex-1 cursor-pointer text-xs">
+                                  <input
+                                    type="checkbox"
+                                    autoFocus
+                                    checked={Boolean(quickEditValue)}
+                                    onChange={(e) => setQuickEditValue(e.target.checked)}
+                                    className="w-4 h-4 rounded text-lad-600"
+                                    data-testid={`quick-editor-input-${field.key}`}
+                                  />
+                                  <span className="text-slate-700 dark:text-slate-200">{field.label}</span>
+                                </label>
+                              ) : (
+                                <input
+                                  type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                                  step={field.type === 'currency' ? 'any' : undefined}
+                                  autoFocus
+                                  value={quickEditValue}
+                                  onChange={(e) => setQuickEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveQuickEdit(e, field);
+                                    if (e.key === 'Escape') cancelQuickEdit();
+                                  }}
+                                  className="flex-1 text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                  data-testid={`quick-editor-input-${field.key}`}
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => handleSaveQuickEdit(e, field)}
+                                className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer transition-colors"
+                                title="Save"
+                                data-testid={`quick-editor-save-${field.key}`}
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelQuickEdit}
+                                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                                title="Cancel"
+                                data-testid={`quick-editor-cancel-${field.key}`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
 
                       if (field.type === 'checklist' && Array.isArray(val)) {
                         return (
@@ -807,31 +1018,65 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
 
                       if (field.type === 'select') {
                         return (
-                          <div key={field.key} className="text-xs">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">
-                              {field.label}
-                            </span>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
-                              {String(val)}
-                            </span>
+                          <div key={field.key} className="text-xs group/field">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-400">
+                                {field.label}
+                              </span>
+                              {isQuickEditable && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => startQuickEdit(e, field.key, val || (field.options?.[0] || ''))}
+                                  className="p-0.5 text-slate-400 hover:text-lad-600 rounded transition-colors cursor-pointer opacity-70 group-hover/field:opacity-100"
+                                  title={`Quick edit ${field.label}`}
+                                  data-testid={`quick-edit-trigger-${field.key}`}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            {val !== undefined && val !== '' && val !== null ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
+                                {String(val)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px] italic">Not set</span>
+                            )}
                           </div>
                         );
                       }
 
                       return (
-                        <div key={field.key} className="text-xs">
-                          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">
-                            {field.label}
-                          </span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {field.type === 'currency' ? (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
-                                ${Number(val).toLocaleString('en-US')}
-                              </span>
-                            ) : (
-                              renderTextWithShortUrls(String(val))
+                        <div key={field.key} className="text-xs group/field">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="text-[10px] font-bold uppercase text-slate-400">
+                              {field.label}
+                            </span>
+                            {isQuickEditable && (
+                              <button
+                                type="button"
+                                onClick={(e) => startQuickEdit(e, field.key, val)}
+                                className="p-0.5 text-slate-400 hover:text-lad-600 rounded transition-colors cursor-pointer opacity-70 group-hover/field:opacity-100"
+                                title={`Quick edit ${field.label}`}
+                                data-testid={`quick-edit-trigger-${field.key}`}
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
                             )}
-                          </span>
+                          </div>
+                          {val !== undefined && val !== '' && val !== null ? (
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              {field.type === 'currency' ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
+                                  ${Number(val).toLocaleString('en-US')}
+                                </span>
+                              ) : (
+                                renderTextWithShortUrls(String(val))
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Not set</span>
+                          )}
                         </div>
                       );
                     })}

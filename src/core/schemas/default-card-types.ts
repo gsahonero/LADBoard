@@ -109,6 +109,7 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
         type: 'currency',
         required: true,
         placeholder: '0.00',
+        quickEdit: true,
       },
       {
         key: 'comments',

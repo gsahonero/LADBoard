@@ -35,6 +35,7 @@ export interface LADFieldDefinition {
   allowCustomOption?: boolean;
   conditional?: LADFieldConditional;
   description?: string;
+  quickEdit?: boolean; // When true, allows for a quick editor directly on the card without editing the full card
 }
 
 export type OnItsWayActionType = 'schedule' | 'delegate' | 'complete' | 'snooze';
