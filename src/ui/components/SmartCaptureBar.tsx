@@ -10,8 +10,10 @@ import { CaptureParser } from '../../core/objects/capture-parser';
 import { InferredStructure } from '../../core/objects/types';
 import { LADObjectPriority } from '../../core/standard/types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
+import { LADCardTypeDefinition, isNotesStorageDisabled, LADQuickStarter } from '../../core/schemas/card-types';
+import { getDefaultQuickStarters } from '../../core/schemas/default-card-types';
 import { CardInferenceConfirmModal } from './CardInferenceConfirmModal';
+import { QuickStarterWizardModal } from './QuickStarterWizardModal';
 import {
   Sparkles,
   ArrowRight,
@@ -24,10 +26,15 @@ import {
   AlertCircle,
   X,
   CheckSquare,
+  Plus,
+  FileText,
+  Home,
+  Briefcase,
+  Zap,
 } from 'lucide-react';
 
 export const SmartCaptureBar: React.FC = () => {
-  const { createObjectFromCapture } = useLAD();
+  const { createObjectFromCapture, activeManifest, updateSpaceIdentity } = useLAD();
   const { t } = useI18n();
   const registry = SchemaRegistry.getInstance();
 
@@ -36,7 +43,10 @@ export const SmartCaptureBar: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasModifiedDetails, setHasModifiedDetails] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStarter, setWizardStarter] = useState<LADQuickStarter | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
 
   // Editable overrides when expanded
   const [overrideTitle, setOverrideTitle] = useState('');
@@ -179,7 +189,65 @@ export const SmartCaptureBar: React.FC = () => {
     }
   };
 
+  const activeStarters: LADQuickStarter[] =
+    activeManifest?.settings?.quick_starters && activeManifest.settings.quick_starters.length > 0
+      ? activeManifest.settings.quick_starters
+      : getDefaultQuickStarters(registry.getAllCardTypes());
+
+  const handleSaveWizardStarter = async (saved: LADQuickStarter) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters
+      ? [...activeManifest.settings.quick_starters]
+      : [...activeStarters];
+    const idx = existing.findIndex((s) => s.id === saved.id);
+    const updated = idx >= 0 ? existing.map((s, i) => (i === idx ? saved : s)) : [...existing, saved];
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const handleDeleteWizardStarter = async (starterId: string) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters || [...activeStarters];
+    const updated = existing.filter((s) => s.id !== starterId);
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const renderStarterIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'CreditCard':
+        return <CreditCard className="w-3 h-3 text-emerald-500" />;
+      case 'Heart':
+        return <Heart className="w-3 h-3 text-rose-500" />;
+      case 'ShoppingBag':
+        return <ShoppingBag className="w-3 h-3 text-amber-500" />;
+      case 'Calendar':
+        return <Calendar className="w-3 h-3 text-blue-500" />;
+      case 'FileText':
+        return <FileText className="w-3 h-3 text-blue-500" />;
+      case 'Home':
+        return <Home className="w-3 h-3 text-indigo-500" />;
+      case 'Briefcase':
+        return <Briefcase className="w-3 h-3 text-purple-500" />;
+      case 'CheckSquare':
+        return <CheckSquare className="w-3 h-3 text-teal-500" />;
+      case 'Zap':
+        return <Zap className="w-3 h-3 text-amber-500" />;
+      default:
+        return <Sparkles className="w-3 h-3 text-indigo-500" />;
+    }
+  };
+
   return (
+
     <div className="w-full bg-gradient-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
@@ -589,40 +657,47 @@ export const SmartCaptureBar: React.FC = () => {
           <span className="text-[11px] font-semibold text-slate-400 mr-1">
             {t('capture.quickStartersLabel')}
           </span>
-          <button
-            type="button"
-            onClick={() => handleStarterClick(t('capture.quickStartersText.medication'))}
-            className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-700 dark:text-rose-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-          >
-            <Heart className="w-3 h-3 text-rose-500" />
-            <span>{t('capture.quickStarters.medication')}</span>
-          </button>
+          {activeStarters.map((st) => {
+            const colorCls =
+              st.color === 'emerald'
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300'
+                : st.color === 'rose'
+                ? 'bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-700 dark:text-rose-300'
+                : st.color === 'amber'
+                ? 'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-700 dark:text-amber-300'
+                : st.color === 'blue'
+                ? 'bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 text-blue-700 dark:text-blue-300'
+                : st.color === 'purple'
+                ? 'bg-purple-50 dark:bg-purple-950/30 hover:bg-purple-100 text-purple-700 dark:text-purple-300'
+                : st.color === 'indigo'
+                ? 'bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300'
+                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300';
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => handleStarterClick(st.templateText)}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer ${colorCls}`}
+                data-testid={`quick-starter-chip-${st.id}`}
+                title={st.description || st.templateText}
+              >
+                {renderStarterIcon(st.icon)}
+                <span>{st.label}</span>
+              </button>
+            );
+          })}
 
           <button
             type="button"
-            onClick={() => handleStarterClick('Bank A checking account new balance is $19')}
-            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+            onClick={() => {
+              setWizardStarter(null);
+              setIsWizardOpen(true);
+            }}
+            className="p-1 text-slate-400 hover:text-lad-600 dark:hover:text-lad-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Customize Quick Starters (Wizard)"
+            data-testid="customize-quick-starters-btn"
           >
-            <CreditCard className="w-3 h-3 text-emerald-500" />
-            <span>Bank Balance</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleStarterClick('Weekly groceries buy milk, bread, eggs budget $50')}
-            className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-700 dark:text-amber-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-          >
-            <ShoppingBag className="w-3 h-3 text-amber-500" />
-            <span>Groceries List</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleStarterClick('Medical appointment with dentist for Carlos today outcome: cavity filled, follow up in 2 weeks')}
-            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-          >
-            <Calendar className="w-3 h-3 text-slate-500" />
-            <span>Medical Appointment</span>
+            <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
@@ -637,6 +712,16 @@ export const SmartCaptureBar: React.FC = () => {
         onConfirm={handleAcceptConfirm}
         onDecline={handleDeclineConfirm}
       />
+
+      {/* Quick Starter Wizard Modal */}
+      <QuickStarterWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        starter={wizardStarter}
+        onSave={handleSaveWizardStarter}
+        onDelete={handleDeleteWizardStarter}
+      />
+
     </div>
   );
 };

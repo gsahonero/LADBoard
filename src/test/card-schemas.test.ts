@@ -78,4 +78,57 @@ describe('Card Schema Registry', () => {
     expect(deleted).toBe(true);
     expect(registry.getCardType('custom.pet_vaccine')).toBeUndefined();
   });
+
+  it('supports unified deleteCardType for custom and default types', () => {
+    const registry = new SchemaRegistry();
+
+    // 1. Add custom card type and delete it via deleteCardType
+    registry.addCustomCardType({
+      id: 'custom.workout',
+      category: 'health',
+      name: 'Workout Log',
+      fields: [{ key: 'reps', label: 'Reps', type: 'number' }],
+    });
+    expect(registry.getCardType('custom.workout')).toBeDefined();
+    const customDeleted = registry.deleteCardType('custom.workout');
+    expect(customDeleted).toBe(true);
+    expect(registry.getCardType('custom.workout')).toBeUndefined();
+
+    // 2. Delete default card type via deleteCardType (removes/disables it for space)
+    expect(registry.getCardType('shopping.groceries_buying')).toBeDefined();
+    expect(registry.isCardTypeDisabled('shopping.groceries_buying')).toBe(false);
+
+    const defaultDeleted = registry.deleteCardType('shopping.groceries_buying');
+    expect(defaultDeleted).toBe(true);
+    expect(registry.isCardTypeDisabled('shopping.groceries_buying')).toBe(true);
+    expect(registry.getCardType('shopping.groceries_buying')).toBeUndefined();
+
+    // Not included in getAllCardTypes() by default
+    const activeTypes = registry.getAllCardTypes();
+    expect(activeTypes.some((ct) => ct.id === 'shopping.groceries_buying')).toBe(false);
+
+    // Can be exported
+    expect(registry.exportDisabledCardTypeIds()).toContain('shopping.groceries_buying');
+
+    // Can be restored
+    registry.restoreCardType('shopping.groceries_buying');
+    expect(registry.isCardTypeDisabled('shopping.groceries_buying')).toBe(false);
+    expect(registry.getCardType('shopping.groceries_buying')).toBeDefined();
+  });
+
+  it('generates quick starters dynamically matching available card types', async () => {
+    const { getDefaultQuickStarters } = await import('../core/schemas/default-card-types');
+    const registry = new SchemaRegistry();
+    const available = registry.getAllCardTypes();
+
+    const starters = getDefaultQuickStarters(available);
+    expect(starters.length).toBeGreaterThan(0);
+    expect(starters.every((s) => s.id && s.cardTypeId && s.label && s.templateText)).toBe(true);
+
+    // If a card type is deleted/disabled, quick starters filter it out
+    registry.deleteCardType('health.medical_appointment');
+    const remainingAvailable = registry.getAllCardTypes();
+    const filteredStarters = getDefaultQuickStarters(remainingAvailable);
+    expect(filteredStarters.some((s) => s.cardTypeId === 'health.medical_appointment')).toBe(false);
+  });
 });

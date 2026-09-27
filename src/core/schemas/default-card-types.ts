@@ -2,7 +2,7 @@
  * LAD Board — Built-in Categories and Default Card Types
  */
 
-import { LADCardTypeDefinition, LADCategoryDefinition } from './card-types';
+import { LADCardTypeDefinition, LADCategoryDefinition, LADQuickStarter } from './card-types';
 
 export const DEFAULT_CATEGORIES: LADCategoryDefinition[] = [
   {
@@ -326,3 +326,74 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     },
   },
 ];
+
+export const DEFAULT_QUICK_STARTERS: LADQuickStarter[] = [
+  {
+    id: 'qs_health_medication',
+    cardTypeId: 'health.medical_appointment',
+    label: 'Medication',
+    templateText: 'Take blood pressure medication daily in the morning at 8:00 AM',
+    domain: 'health',
+    icon: 'Heart',
+    color: 'rose',
+    description: 'Quickly log or remind daily medications',
+  },
+  {
+    id: 'qs_finances_balance',
+    cardTypeId: 'finances.account_balance',
+    label: 'Bank Balance',
+    templateText: 'Bank A checking account new balance is $19',
+    domain: 'finances',
+    icon: 'CreditCard',
+    color: 'emerald',
+    description: 'Update bank or card current balance',
+  },
+  {
+    id: 'qs_shopping_groceries',
+    cardTypeId: 'shopping.groceries_buying',
+    label: 'Groceries List',
+    templateText: 'Weekly groceries buy milk, bread, eggs budget $50',
+    domain: 'shopping',
+    icon: 'ShoppingBag',
+    color: 'amber',
+    description: 'Create a groceries buying checklist',
+  },
+  {
+    id: 'qs_health_appointment',
+    cardTypeId: 'health.medical_appointment',
+    label: 'Medical Appointment',
+    templateText: 'Medical appointment with dentist for Carlos today outcome: cavity filled, follow up in 2 weeks',
+    domain: 'health',
+    icon: 'Calendar',
+    color: 'blue',
+    description: 'Schedule or record doctor visits and outcomes',
+  },
+];
+
+export function getDefaultQuickStarters(availableCardTypes?: LADCardTypeDefinition[]): LADQuickStarter[] {
+  if (!availableCardTypes || availableCardTypes.length === 0) {
+    return [...DEFAULT_QUICK_STARTERS];
+  }
+  const typeIds = new Set(availableCardTypes.map((ct) => ct.id));
+  const filtered = DEFAULT_QUICK_STARTERS.filter((qs) => typeIds.has(qs.cardTypeId));
+  if (filtered.length > 0) return [...filtered];
+
+  return availableCardTypes.slice(0, 4).map((ct) => ({
+    id: `qs_${ct.id.replace(/[^a-z0-9]/gi, '_')}`,
+    cardTypeId: ct.id,
+    label: ct.name,
+    templateText: ct.fields.length > 0 ? `${ct.name}: ${ct.fields.map((f) => f.label).join(', ')}` : ct.name,
+    domain: ct.category,
+    icon: ct.icon || 'Sparkles',
+    color:
+      ct.category === 'finances'
+        ? 'emerald'
+        : ct.category === 'shopping'
+        ? 'amber'
+        : ct.category === 'health'
+        ? 'rose'
+        : 'indigo',
+    description: ct.description,
+  }));
+}
+

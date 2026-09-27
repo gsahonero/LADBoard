@@ -108,4 +108,34 @@ describe('SyncBadge Hover Status Pane', () => {
       { timeout: 1500 }
     );
   });
+
+  it('displays syncing progress caption with element count and percentage', () => {
+    const syncingProgressState: SyncState = {
+      ...baseSyncState,
+      status: 'syncing',
+      progress: {
+        total: 8,
+        current: 3,
+        percentage: 38,
+        phase: 'pushing',
+        currentElement: 'obj_123',
+      },
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <SyncBadge syncState={syncingProgressState} />
+      </I18nProvider>
+    );
+
+    expect(screen.getByText('Syncing... 3/8 (38%)')).toBeInTheDocument();
+
+    const badgeContainer = screen.getByText('Syncing... 3/8 (38%)').closest('div');
+    fireEvent.mouseEnter(badgeContainer!);
+
+    expect(screen.getByTestId('sync-progress-details')).toBeInTheDocument();
+    expect(screen.getByText('3/8 (38%)')).toBeInTheDocument();
+    expect(screen.getByText('Uploading local changes')).toBeInTheDocument();
+    expect(screen.getByText('obj_123')).toBeInTheDocument();
+  });
 });

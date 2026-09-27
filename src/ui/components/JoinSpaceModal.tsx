@@ -14,6 +14,8 @@ import {
   Loader2,
   Lock,
   RotateCcw,
+  Radio,
+  EyeOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -274,6 +276,35 @@ export const JoinSpaceModal: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Space Presence Transparency Disclosure */}
+              {(verification.manifest.settings?.collaboration?.presence_enabled ?? true) ? (
+                <div 
+                  className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-start gap-2.5"
+                  data-testid="presence-banner-active"
+                >
+                  <Radio className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 animate-pulse" />
+                  <div>
+                    <span className="font-bold block">{t('joinModal.presenceActiveTitle') || 'Live Peer Presence Active'}</span>
+                    <span className="text-[10px] text-indigo-700/90 dark:text-indigo-300/80 leading-normal block">
+                      {t('joinModal.presenceActiveDesc') || 'Active collaborators in this space can see when you are viewing or editing cards in real time.'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div 
+                  className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-2.5"
+                  data-testid="presence-banner-disabled"
+                >
+                  <EyeOff className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">{t('joinModal.presenceDisabledTitle') || 'Private Stealth Mode'}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal block">
+                      {t('joinModal.presenceDisabledDesc') || 'Live presence is turned off for this space. Your active session will not be broadcast to peers.'}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />

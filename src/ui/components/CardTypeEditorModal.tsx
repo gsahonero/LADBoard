@@ -215,6 +215,31 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
     }
   };
 
+  const handleDeleteCardType = async () => {
+    if (!cardType) return;
+    setIsSaving(true);
+    try {
+      registry.deleteCardType(cardType.id);
+      if (activeManifest) {
+        const exportedCustom = registry.exportCustomCardTypes();
+        const exportedDisabled = registry.exportDisabledCardTypeIds();
+        await updateSpaceIdentity(activeManifest.space_id, {
+          settings: {
+            ...(activeManifest.settings || {}),
+            custom_card_types: exportedCustom,
+            disabled_card_type_ids: exportedDisabled,
+          },
+        });
+      }
+      onSaved?.(cardType);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete card type');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
 
@@ -284,13 +309,15 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         registry.addCustomCardType(definition);
       }
 
-      // Persist custom card types to space manifest
+      // Persist custom card types and disabled state to space manifest
       if (activeManifest) {
         const exportedCustom = registry.exportCustomCardTypes();
+        const exportedDisabled = registry.exportDisabledCardTypeIds();
         await updateSpaceIdentity(activeManifest.space_id, {
           settings: {
             ...(activeManifest.settings || {}),
             custom_card_types: exportedCustom,
+            disabled_card_type_ids: exportedDisabled,
           },
         });
       }
@@ -300,6 +327,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
     } catch (err: any) {
       setError(err.message || 'Failed to save card type');
     } finally {
+
       setIsSaving(false);
     }
   };
@@ -859,6 +887,18 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                 : 'Custom schema will sync with this space.'}
             </span>
             <div className="flex items-center gap-2">
+              {cardType && (
+                <button
+                  type="button"
+                  onClick={handleDeleteCardType}
+                  disabled={isSaving}
+                  className="px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  data-testid="delete-card-type-modal-btn"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isDefault ? 'Remove From Space' : 'Delete Card Type'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -867,6 +907,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
               >
                 Close
               </button>
+
               <button
                 type="button"
                 onClick={handleSave}

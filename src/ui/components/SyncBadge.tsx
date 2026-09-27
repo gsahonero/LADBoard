@@ -81,13 +81,20 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
           text: t('sync.synced'),
           bg: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
         };
-      case 'syncing':
+      case 'syncing': {
+        const progress = syncState.progress;
+        let syncingText = t('sync.syncing');
+        if (progress && progress.total > 0) {
+          syncingText = `${t('sync.syncing')} ${progress.current}/${progress.total} (${progress.percentage}%)`;
+        }
         return {
           icon: <RefreshCw className="w-3.5 h-3.5 text-lad-500 animate-spin" />,
-          text: t('sync.syncing'),
+          text: syncingText,
           bg: 'bg-lad-50 dark:bg-lad-950/30 text-lad-700 dark:text-lad-300 border-lad-200 dark:border-lad-800',
         };
+      }
       case 'saving_locally':
+
         return {
           icon: <RefreshCw className="w-3.5 h-3.5 text-lad-500 animate-spin" />,
           text: t('sync.savedLocally'),
@@ -196,10 +203,17 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
         onClick={handleBadgeClick}
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 cursor-pointer ${badge.bg}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-85 cursor-pointer relative overflow-hidden ${badge.bg}`}
+        data-testid="sync-badge-button"
       >
         {badge.icon}
         <span>{badge.text}</span>
+        {syncState.status === 'syncing' && syncState.progress && syncState.progress.total > 0 && (
+          <span
+            className="absolute bottom-0 left-0 h-0.5 bg-lad-500/80 transition-all duration-300"
+            style={{ width: `${syncState.progress.percentage}%` }}
+          />
+        )}
       </button>
 
       <AnimatePresence>
@@ -222,8 +236,52 @@ export const SyncBadge: React.FC<{ syncState: SyncState; onSyncClick?: () => voi
               </span>
             </div>
 
+            {/* Sync Progress Breakdown when syncing or has active progress */}
+            {syncState.progress && syncState.progress.total > 0 && (
+              <div className="mt-2.5 p-2.5 rounded-xl bg-lad-50/70 dark:bg-lad-950/40 border border-lad-200/60 dark:border-lad-800/60 space-y-1.5" data-testid="sync-progress-details">
+                <div className="flex items-center justify-between text-xs font-semibold text-lad-800 dark:text-lad-200">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className={`w-3 h-3 ${syncState.status === 'syncing' ? 'animate-spin' : ''} text-lad-600 dark:text-lad-400`} />
+                    <span>
+                      {syncState.status === 'syncing'
+                        ? t('sync.syncing')
+                        : syncState.status === 'synced'
+                        ? t('sync.synced')
+                        : 'Sync Progress'}
+                    </span>
+                  </span>
+                  <span className="font-mono text-[11px] font-bold">
+                    {syncState.progress.current}/{syncState.progress.total} ({syncState.progress.percentage}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-lad-600 dark:bg-lad-500 h-full transition-all duration-300 rounded-full"
+                    style={{ width: `${syncState.progress.percentage}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                  <span>
+                    {syncState.progress.phase === 'pushing'
+                      ? 'Uploading local changes'
+                      : syncState.progress.phase === 'pulling'
+                      ? 'Downloading remote changes'
+                      : syncState.progress.phase === 'completed'
+                      ? 'All elements synced'
+                      : 'Sync in progress'}
+                  </span>
+                  {syncState.progress.currentElement && (
+                    <span className="truncate max-w-[120px] font-mono text-[9px]">
+                      {syncState.progress.currentElement}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Status Breakdown */}
             <div className="py-2.5 space-y-3">
+
               {/* Google Drive Status */}
               <div className="flex items-start gap-2.5">
                 <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 mt-0.5">

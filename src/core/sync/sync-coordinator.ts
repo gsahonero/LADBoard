@@ -176,22 +176,35 @@ export class SyncCoordinator {
     const pendingOps = this.offlineQueue.getQueue();
     const hasLocalPending = pendingOps.length > 0;
 
-    // Do NOT transition UI to 'syncing' if this is a silent check with no pending local ops
-    if (!isSilent || hasLocalPending) {
-      this.updateState({ status: 'syncing' });
-    }
-
     try {
+      const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
+      await remoteOpLog.loadAll();
+
+      const remoteOps = remoteOpLog.getOperations();
+      const localKnownOpIds = new Set(this.operationLog.getOperations().map((o) => o.operation_id));
+      const newRemoteOps = remoteOps.filter((ro) => !localKnownOpIds.has(ro.operation_id));
+
+      const totalElements = pendingOps.length + newRemoteOps.length;
+      let syncedElements = 0;
+
+      // Do NOT transition UI to 'syncing' if this is a silent check with no pending ops
+      if (!isSilent || totalElements > 0) {
+        this.updateState({
+          status: 'syncing',
+          progress: {
+            total: totalElements,
+            current: 0,
+            percentage: 0,
+            phase: hasLocalPending ? 'pushing' : (newRemoteOps.length > 0 ? 'pulling' : 'idle'),
+            currentElement: pendingOps[0]?.target || pendingOps[0]?.type || undefined,
+          },
+        });
+      }
+
       // Step 1: Push pending local operations to remote
       if (hasLocalPending) {
-        const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
-        await remoteOpLog.loadAll();
-
-        const remoteOps = remoteOpLog.getOperations();
-        const localKnownOpIds = new Set(this.operationLog.getOperations().map((o) => o.operation_id));
-        const newRemoteOps = remoteOps.filter((ro) => !localKnownOpIds.has(ro.operation_id));
-
         for (const localOp of pendingOps) {
+
           // If this target already has an unresolved active conflict, skip pushing
           if (this.state.activeConflicts.some((c) => c.targetId === localOp.target && !c.resolved)) {
             continue;
@@ -275,19 +288,27 @@ export class SyncCoordinator {
           // Append to remote log and remove from offline queue
           await remoteOpLog.append(localOp);
           await this.offlineQueue.remove(localOp.operation_id);
+
+          syncedElements++;
+          this.updateState({
+            progress: {
+              total: totalElements,
+              current: syncedElements,
+              percentage: totalElements > 0 ? Math.min(100, Math.round((syncedElements / totalElements) * 100)) : 100,
+              phase: 'pushing',
+              currentElement: localOp.target || localOp.type,
+            },
+          });
         }
       }
 
       // Step 2: Pull any remote operations not yet in local log
-      const remoteOpLog = new OperationLog(this.spaceId, this.remoteStorage);
       await remoteOpLog.loadAll();
       const allRemoteOps = remoteOpLog.getOperations();
+      const newRemoteOpsToApply = allRemoteOps.filter((ro) => !localKnownOpIds.has(ro.operation_id));
 
-      const localOpIds = new Set(this.operationLog.getOperations().map((o) => o.operation_id));
-      const newRemoteOps = allRemoteOps.filter((ro) => !localOpIds.has(ro.operation_id));
-
-      if (newRemoteOps.length > 0) {
-        for (const newOp of newRemoteOps) {
+      if (newRemoteOpsToApply.length > 0) {
+        for (const newOp of newRemoteOpsToApply) {
           // Check if local offlineQueue has a pending operation on the same target
           const conflictingPendingLocal = this.offlineQueue
             .getQueue()
@@ -350,6 +371,10 @@ export class SyncCoordinator {
                 if (remoteManifest.settings?.custom_card_types) {
                   SchemaRegistry.getInstance().importCustomCardTypes(remoteManifest.settings.custom_card_types);
                 }
+                if (remoteManifest.settings?.disabled_card_type_ids) {
+                  SchemaRegistry.getInstance().loadDisabledCardTypeIds(remoteManifest.settings.disabled_card_type_ids);
+                }
+
               }
             } else if (newOp.type.startsWith('graph.node.')) {
               const remoteNodes = await this.remoteStorage.readFile(`LAD/${this.spaceId}/graph/nodes.json`);
@@ -387,10 +412,21 @@ export class SyncCoordinator {
           } catch (fileErr) {
             console.warn(`[LAD:SyncCoordinator] Warning applying remote file for op ${newOp.operation_id}:`, fileErr);
           }
+
+          syncedElements++;
+          this.updateState({
+            progress: {
+              total: totalElements,
+              current: syncedElements,
+              percentage: totalElements > 0 ? Math.min(100, Math.round((syncedElements / totalElements) * 100)) : 100,
+              phase: 'pulling',
+              currentElement: newOp.target || newOp.type,
+            },
+          });
         }
 
         if (this.onRemoteOperationsApplied) {
-          await this.onRemoteOperationsApplied(newRemoteOps);
+          await this.onRemoteOperationsApplied(newRemoteOpsToApply);
         }
       }
 
@@ -477,6 +513,12 @@ export class SyncCoordinator {
         pendingOpsCount: this.offlineQueue.size(),
         lastSyncedAt: new Date().toISOString(),
         errorMessage: null,
+        progress: {
+          total: totalElements,
+          current: totalElements,
+          percentage: 100,
+          phase: 'completed',
+        },
       });
     } catch (err: any) {
       console.warn('[LAD:SyncCoordinator] ⚠️ GDrive sync failed; falling back to local sync:', err);
@@ -486,9 +528,16 @@ export class SyncCoordinator {
         status: 'needs_attention',
         pendingOpsCount: queueCount,
         errorMessage: `GDrive sync failed (${err.message || 'remote connection error'}). Preserved locally.`,
+        progress: {
+          total: queueCount,
+          current: 0,
+          percentage: 0,
+          phase: 'idle',
+        },
       });
     }
   }
+
 
   async resolveConflict(
     conflictId: string,

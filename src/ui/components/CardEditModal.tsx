@@ -33,6 +33,8 @@ import {
   Layers,
   Loader2,
   History,
+  Link2,
+  Unlink,
 } from 'lucide-react';
 
 interface CardEditModalProps {
@@ -42,7 +44,7 @@ interface CardEditModalProps {
 }
 
 export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, obj }) => {
-  const { updateObject, activeManifest } = useLAD();
+  const { updateObject, activeManifest, objects, nodes, edges, addGraphEdge, removeGraphEdge } = useLAD();
   const { t } = useI18n();
   const registry = SchemaRegistry.getInstance();
 
@@ -58,6 +60,68 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
   const [newChecklistItemText, setNewChecklistItemText] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedTargetCardId, setSelectedTargetCardId] = useState<string>('');
+  const [selectedRelationType, setSelectedRelationType] = useState<string>('relates_to');
+  const [isLinking, setIsLinking] = useState(false);
+
+  const cardNode = useMemo(() => {
+    return nodes?.find((n) => n.ref_id === obj.object_id || n.node_id === `node_${obj.object_id}`);
+  }, [nodes, obj.object_id]);
+
+  const cardNodeId = cardNode?.node_id || `node_${obj.object_id}`;
+
+  const connectedEdges = useMemo(() => {
+    if (!edges) return [];
+    return edges.filter(
+      (e) =>
+        e.source === cardNodeId ||
+        e.target === cardNodeId ||
+        e.source === obj.object_id ||
+        e.target === obj.object_id
+    );
+  }, [edges, cardNodeId, obj.object_id]);
+
+  const linkedEntities = useMemo(() => {
+    return connectedEdges.map((edge) => {
+      const isOutbound = edge.source === cardNodeId || edge.source === obj.object_id;
+      const otherId = isOutbound ? edge.target : edge.source;
+      const targetObjId = otherId.replace(/^node_/, '');
+      const otherObj = objects?.find((o) => o.object_id === targetObjId);
+      const otherNode = nodes?.find((n) => n.node_id === otherId || n.ref_id === targetObjId);
+
+      return {
+        edgeId: edge.edge_id,
+        relationType: edge.type,
+        isOutbound,
+        targetObjId,
+        title: otherObj?.title || otherNode?.label || targetObjId,
+        domain: otherObj?.domain || 'general',
+      };
+    });
+  }, [connectedEdges, cardNodeId, obj.object_id, objects, nodes]);
+
+  const availableTargetCards = useMemo(() => {
+    const linkedTargetIds = new Set(linkedEntities.map((e) => e.targetObjId));
+    return (objects || []).filter(
+      (o) => o.object_id !== obj.object_id && !linkedTargetIds.has(o.object_id)
+    );
+  }, [objects, obj.object_id, linkedEntities]);
+
+  const handleLinkCard = async () => {
+    if (!selectedTargetCardId || isLinking) return;
+    setIsLinking(true);
+    try {
+      const targetNodeId = `node_${selectedTargetCardId}`;
+      await addGraphEdge(cardNodeId, targetNodeId, selectedRelationType);
+      setSelectedTargetCardId('');
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleUnlinkCard = async (edgeId: string) => {
+    await removeGraphEdge(edgeId);
+  };
 
   // Initialize state from object when opened
   useEffect(() => {
@@ -734,7 +798,90 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
               </div>
             )}
 
-            {/* 6. Version History Timeline */}
+            {/* 6. Connected Cards & Relational Graph */}
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-edit-relations-section">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Linked Items ({linkedEntities.length})
+                  </label>
+                </div>
+              </div>
+
+              {/* Linked Items List */}
+              {linkedEntities.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {linkedEntities.map((link) => (
+                    <div
+                      key={link.edgeId}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs"
+                      data-testid={`linked-card-${link.targetObjId}`}
+                    >
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                        {link.relationType.replace(/_/g, ' ')}
+                      </span>
+                      <span className="truncate max-w-[150px]">{link.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnlinkCard(link.edgeId)}
+                        className="text-slate-400 hover:text-rose-500 transition-colors p-0.5 cursor-pointer"
+                        title="Unlink card"
+                        data-testid={`unlink-btn-${link.targetObjId}`}
+                      >
+                        <Unlink className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic">
+                  No other cards are linked to this item yet.
+                </p>
+              )}
+
+              {/* Add Link Form */}
+              {availableTargetCards.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                  <select
+                    value={selectedRelationType}
+                    onChange={(e) => setSelectedRelationType(e.target.value)}
+                    className="p-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 cursor-pointer"
+                    data-testid="select-relation-type"
+                  >
+                    <option value="relates_to">Relates to</option>
+                    <option value="blocks">Blocks</option>
+                    <option value="subtask_of">Subtask of</option>
+                    <option value="depends_on">Depends on</option>
+                  </select>
+                  <select
+                    value={selectedTargetCardId}
+                    onChange={(e) => setSelectedTargetCardId(e.target.value)}
+                    className="flex-1 p-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 truncate cursor-pointer"
+                    data-testid="select-target-card"
+                  >
+                    <option value="">Select a card to link...</option>
+                    {availableTargetCards.map((c) => (
+                      <option key={c.object_id} value={c.object_id}>
+                        {c.title} ({c.domain || 'general'})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleLinkCard}
+                    disabled={!selectedTargetCardId || isLinking}
+                    className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    data-testid="link-card-btn"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Link</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 7. Version History Timeline */}
             {obj.history && obj.history.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-edit-history-section">
                 <div className="flex items-center justify-between">

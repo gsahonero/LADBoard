@@ -66,6 +66,12 @@ export interface LADSpaceSettings {
   };
   auto_archive_days?: number;
   custom_card_types?: any[];
+  disabled_card_type_ids?: string[];
+  quick_starters?: any[];
+  collaboration?: {
+    presence_enabled?: boolean;
+    p2p_enabled?: boolean;
+  };
 }
 
 export interface LADSpaceManifest {

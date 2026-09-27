@@ -23,7 +23,14 @@ import {
   ShoppingBag,
   Home,
   Briefcase,
+  Plus,
+  CheckSquare,
+  Zap,
 } from 'lucide-react';
+import { SchemaRegistry } from '../../core/schemas/schema-registry';
+import { LADQuickStarter } from '../../core/schemas/card-types';
+import { getDefaultQuickStarters } from '../../core/schemas/default-card-types';
+import { QuickStarterWizardModal } from './QuickStarterWizardModal';
 
 interface CaptureModalProps {
   isOpen: boolean;
@@ -36,12 +43,73 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
   onClose,
   defaultDomain,
 }) => {
-  const { createObjectFromCapture } = useLAD();
+  const { createObjectFromCapture, activeManifest, updateSpaceIdentity } = useLAD();
   const { t } = useI18n();
 
   const [activeTab, setActiveTab] = useState<'text' | 'cards'>('text');
   const [inputText, setInputText] = useState('');
   const [inferred, setInferred] = useState<InferredStructure | null>(null);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStarter, setWizardStarter] = useState<LADQuickStarter | null>(null);
+
+  const registry = SchemaRegistry.getInstance();
+  const activeStarters: LADQuickStarter[] =
+    activeManifest?.settings?.quick_starters && activeManifest.settings.quick_starters.length > 0
+      ? activeManifest.settings.quick_starters
+      : getDefaultQuickStarters(registry.getAllCardTypes());
+
+  const handleSaveWizardStarter = async (saved: LADQuickStarter) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters
+      ? [...activeManifest.settings.quick_starters]
+      : [...activeStarters];
+    const idx = existing.findIndex((s) => s.id === saved.id);
+    const updated = idx >= 0 ? existing.map((s, i) => (i === idx ? saved : s)) : [...existing, saved];
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const handleDeleteWizardStarter = async (starterId: string) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters || [...activeStarters];
+    const updated = existing.filter((s) => s.id !== starterId);
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const renderStarterIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'CreditCard':
+        return <CreditCard className="w-3.5 h-3.5 text-emerald-500" />;
+      case 'Heart':
+        return <Heart className="w-3.5 h-3.5 text-rose-500" />;
+      case 'ShoppingBag':
+        return <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />;
+      case 'Calendar':
+        return <Calendar className="w-3.5 h-3.5 text-blue-500" />;
+      case 'FileText':
+        return <FileText className="w-3.5 h-3.5 text-blue-500" />;
+      case 'Home':
+        return <Home className="w-3.5 h-3.5 text-indigo-500" />;
+      case 'Briefcase':
+        return <Briefcase className="w-3.5 h-3.5 text-purple-500" />;
+      case 'CheckSquare':
+        return <CheckSquare className="w-3.5 h-3.5 text-teal-500" />;
+      case 'Zap':
+        return <Zap className="w-3.5 h-3.5 text-amber-500" />;
+      default:
+        return <Sparkles className="w-3.5 h-3.5 text-indigo-500" />;
+    }
+  };
+
 
   // Editable inference overrides
   const [title, setTitle] = useState('');
@@ -193,48 +261,53 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
               {activeTab === 'text' ? (
                 <div className="space-y-3">
                   {/* Quick Starters */}
-                  <div className="flex flex-wrap gap-1.5">
-                    <motion.button
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {activeStarters.map((st) => {
+                      const colorCls =
+                        st.color === 'emerald'
+                          ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                          : st.color === 'rose'
+                          ? 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                          : st.color === 'amber'
+                          ? 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                          : st.color === 'blue'
+                          ? 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                          : st.color === 'purple'
+                          ? 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
+                          : st.color === 'indigo'
+                          ? 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                          : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300';
+                      return (
+                        <motion.button
+                          key={st.id}
+                          type="button"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => handleQuickStarter(st.templateText, st.domain)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${colorCls}`}
+                          data-testid={`modal-quick-starter-${st.id}`}
+                          title={st.description || st.templateText}
+                        >
+                          {renderStarterIcon(st.icon)}
+                          <span>{st.label}</span>
+                        </motion.button>
+                      );
+                    })}
+
+                    <button
                       type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => handleQuickStarter(t('capture.quickStartersText.medication'), 'health')}
-                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => {
+                        setWizardStarter(null);
+                        setIsWizardOpen(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      title="Customize Quick Starters"
+                      data-testid="modal-customize-quick-starters-btn"
                     >
-                      <Heart className="w-3.5 h-3.5 text-rose-500" />
-                      <span>{t('capture.quickStarters.medication')}</span>
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => handleQuickStarter(t('capture.quickStartersText.balance'), 'finances')}
-                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <CreditCard className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>{t('capture.quickStarters.balance')}</span>
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => handleQuickStarter(t('capture.quickStartersText.shopping'), 'shopping')}
-                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{t('capture.quickStarters.shopping')}</span>
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => handleQuickStarter(t('capture.quickStartersText.appointment'), 'health')}
-                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-blue-500" />
-                      <span>{t('capture.quickStarters.appointment')}</span>
-                    </motion.button>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+
 
                   <textarea
                     value={inputText}
@@ -395,6 +468,16 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
           </motion.div>
         </div>
       )}
+
+      {/* Quick Starter Wizard Modal */}
+      <QuickStarterWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        starter={wizardStarter}
+        onSave={handleSaveWizardStarter}
+        onDelete={handleDeleteWizardStarter}
+      />
     </AnimatePresence>
   );
 };
+

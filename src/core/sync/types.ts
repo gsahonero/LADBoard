@@ -27,6 +27,14 @@ export interface ConflictRecord {
   createdAt: string;
 }
 
+export interface SyncProgress {
+  total: number;
+  current: number;
+  phase: 'idle' | 'preparing' | 'pushing' | 'pulling' | 'completed';
+  percentage: number;
+  currentElement?: string;
+}
+
 export interface SyncState {
   status: SyncStatus;
   isOnline: boolean;
@@ -34,4 +42,6 @@ export interface SyncState {
   lastSyncedAt: string | null;
   activeConflicts: ConflictRecord[];
   errorMessage: string | null;
+  progress?: SyncProgress;
 }
+

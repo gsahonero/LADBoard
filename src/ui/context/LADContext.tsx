@@ -94,6 +94,7 @@ export interface LADContextType {
   addGraphNode: (label: string, type: LADGraphNode['type'], refId?: string) => Promise<void>;
   addGraphEdge: (source: string, target: string, type: string, policies?: any) => Promise<void>;
   updateGraphEdge: (edgeId: string, policies: any) => Promise<void>;
+  removeGraphEdge: (edgeId: string) => Promise<void>;
 
   // Active Layer & Attention
   activeAlerts: LADActiveAlert[];
@@ -290,6 +291,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (loaded.manifest.settings?.custom_card_types) {
         SchemaRegistry.getInstance().importCustomCardTypes(loaded.manifest.settings.custom_card_types);
       }
+      if (loaded.manifest.settings?.disabled_card_type_ids) {
+        SchemaRegistry.getInstance().loadDisabledCardTypeIds(loaded.manifest.settings.disabled_card_type_ids);
+      }
+
 
       if (!mounted) return;
       if (typeof window !== 'undefined') {
@@ -351,6 +356,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (activeSpace.manifest.settings?.custom_card_types) {
           SchemaRegistry.getInstance().importCustomCardTypes(activeSpace.manifest.settings.custom_card_types);
         }
+        if (activeSpace.manifest.settings?.disabled_card_type_ids) {
+          SchemaRegistry.getInstance().loadDisabledCardTypeIds(activeSpace.manifest.settings.disabled_card_type_ids);
+        }
+
         // Refresh space state on successful sync (manifest, objects, graph)
         setObjects(activeSpace.objectStore.getAll());
         setNodes(activeSpace.graphStore.getNodes());
@@ -447,6 +456,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (loaded.manifest.settings?.custom_card_types) {
         SchemaRegistry.getInstance().importCustomCardTypes(loaded.manifest.settings.custom_card_types);
       }
+      if (loaded.manifest.settings?.disabled_card_type_ids) {
+        SchemaRegistry.getInstance().loadDisabledCardTypeIds(loaded.manifest.settings.disabled_card_type_ids);
+      }
+
 
       setActiveSpace(loaded);
       setObjects(loaded.objectStore.getAll());
@@ -557,6 +570,10 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (patch.settings?.custom_card_types) {
         SchemaRegistry.getInstance().importCustomCardTypes(patch.settings.custom_card_types);
       }
+      if (patch.settings?.disabled_card_type_ids !== undefined) {
+        SchemaRegistry.getInstance().loadDisabledCardTypeIds(patch.settings.disabled_card_type_ids);
+      }
+
       await userRegistryManager.updateSpaceIdentity(spaceId, patch);
       const actor = userRegistryManager.getRegistry()?.user_id;
       const updatedManifest = await spaceManager.updateSpaceManifest(spaceId, patch, actor);
@@ -1338,6 +1355,15 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [activeSpace, refreshSpaceState]
   );
 
+  const removeGraphEdge = useCallback(
+    async (edgeId: string) => {
+      if (!activeSpace) return;
+      await activeSpace.graphStore.removeEdge(edgeId);
+      refreshSpaceState();
+    },
+    [activeSpace, refreshSpaceState]
+  );
+
   const dismissAlert = useCallback(
     (alertId: string) => {
       if (!activeSpace) return;
@@ -1699,6 +1725,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addGraphNode,
         addGraphEdge,
         updateGraphEdge,
+        removeGraphEdge,
         activeAlerts,
         dismissAlert,
         snoozeAlert,

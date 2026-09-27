@@ -11,8 +11,9 @@ export class SchemaRegistry {
   private defaultCardTypes: Map<string, LADCardTypeDefinition> = new Map();
   private customCardTypes: Map<string, LADCardTypeDefinition> = new Map();
   private spaceCustomizedDefaults: Map<string, LADCardTypeDefinition> = new Map();
+  private disabledCardTypeIds: Set<string> = new Set();
 
-  constructor(customTypes: LADCardTypeDefinition[] = []) {
+  constructor(customTypes: LADCardTypeDefinition[] = [], disabledIds: string[] = []) {
     // Seed default categories
     for (const cat of DEFAULT_CATEGORIES) {
       this.categories.set(cat.id, { ...cat });
@@ -25,7 +26,9 @@ export class SchemaRegistry {
 
     // Load custom types if any
     this.loadCustomCardTypes(customTypes);
+    this.loadDisabledCardTypeIds(disabledIds);
   }
+
 
   loadCustomCardTypes(customTypes: LADCardTypeDefinition[]) {
     this.customCardTypes.clear();
@@ -50,6 +53,27 @@ export class SchemaRegistry {
     }
   }
 
+  loadDisabledCardTypeIds(ids: string[] = []): void {
+    this.disabledCardTypeIds.clear();
+    if (Array.isArray(ids)) {
+      for (const id of ids) {
+        if (id) this.disabledCardTypeIds.add(id);
+      }
+    }
+  }
+
+  exportDisabledCardTypeIds(): string[] {
+    return Array.from(this.disabledCardTypeIds);
+  }
+
+  isCardTypeDisabled(id: string): boolean {
+    return this.disabledCardTypeIds.has(id);
+  }
+
+  restoreCardType(id: string): boolean {
+    return this.disabledCardTypeIds.delete(id);
+  }
+
   getAllCategories(): LADCategoryDefinition[] {
     return Array.from(this.categories.values());
   }
@@ -58,21 +82,28 @@ export class SchemaRegistry {
     return this.categories.get(id);
   }
 
-  getAllCardTypes(): LADCardTypeDefinition[] {
+  getAllCardTypes(includeDisabled = false): LADCardTypeDefinition[] {
     const defaults = Array.from(this.defaultCardTypes.values()).map((def) => {
       return this.spaceCustomizedDefaults.get(def.id) || def;
     });
-    return [
+    const all = [
       ...defaults,
       ...Array.from(this.customCardTypes.values()),
     ];
+    if (includeDisabled) {
+      return all;
+    }
+    return all.filter((ct) => !this.disabledCardTypeIds.has(ct.id));
   }
 
-  getCardTypesForCategory(categoryId: string): LADCardTypeDefinition[] {
-    return this.getAllCardTypes().filter((ct) => ct.category === categoryId);
+  getCardTypesForCategory(categoryId: string, includeDisabled = false): LADCardTypeDefinition[] {
+    return this.getAllCardTypes(includeDisabled).filter((ct) => ct.category === categoryId);
   }
 
-  getCardType(id: string): LADCardTypeDefinition | undefined {
+  getCardType(id: string, includeDisabled = false): LADCardTypeDefinition | undefined {
+    if (!includeDisabled && this.disabledCardTypeIds.has(id)) {
+      return undefined;
+    }
     return (
       this.spaceCustomizedDefaults.get(id) ||
       this.customCardTypes.get(id) ||
@@ -102,6 +133,7 @@ export class SchemaRegistry {
       isSpaceCustomized: true,
     };
     this.spaceCustomizedDefaults.set(defaultId, updated);
+    this.disabledCardTypeIds.delete(defaultId);
     return updated;
   }
 
@@ -128,6 +160,7 @@ export class SchemaRegistry {
       isDefault: false,
     };
     this.customCardTypes.set(sanitized.id, sanitized);
+    this.disabledCardTypeIds.delete(sanitized.id);
     return sanitized;
   }
 
@@ -146,9 +179,27 @@ export class SchemaRegistry {
       isDefault: false,
     };
     this.customCardTypes.set(id, updated);
+    this.disabledCardTypeIds.delete(id);
     return updated;
   }
 
+  /**
+   * General card type deletion:
+   * - If default card type: hides/disables it for this space and cleans space-customized copy.
+   * - If custom card type: permanently removes it from the space.
+   */
+  deleteCardType(id: string): boolean {
+    if (this.defaultCardTypes.has(id)) {
+      this.disabledCardTypeIds.add(id);
+      this.spaceCustomizedDefaults.delete(id);
+      return true;
+    }
+    return this.customCardTypes.delete(id);
+  }
+
+  /**
+   * Deletes a custom card type. Throws if called on a default card type.
+   */
   deleteCustomCardType(id: string): boolean {
     if (this.defaultCardTypes.has(id)) {
       throw new Error(`Cannot delete default card type "${id}"`);

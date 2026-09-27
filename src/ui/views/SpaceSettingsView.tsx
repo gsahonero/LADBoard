@@ -30,10 +30,16 @@ import {
   AlertTriangle,
   Archive,
   Pencil,
+  RotateCcw,
+  Zap,
 } from 'lucide-react';
+
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
-import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schemas/card-types';
+import { LADCardTypeDefinition, isNotesStorageDisabled, LADQuickStarter } from '../../core/schemas/card-types';
+import { getDefaultQuickStarters } from '../../core/schemas/default-card-types';
 import { CardTypeEditorModal } from '../components/CardTypeEditorModal';
+import { QuickStarterWizardModal } from '../components/QuickStarterWizardModal';
+
 
 
 interface SpaceSettingsViewProps {
@@ -78,6 +84,13 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
   // Card Type Schema Editor State
   const [editingCardType, setEditingCardType] = useState<LADCardTypeDefinition | null | undefined>(null);
   const [isCardTypeEditorOpen, setIsCardTypeEditorOpen] = useState(false);
+  const [cardTypeToDelete, setCardTypeToDelete] = useState<LADCardTypeDefinition | null>(null);
+  const [isDeletingCardType, setIsDeletingCardType] = useState(false);
+
+  // Quick Starters Management State
+  const [isQuickStarterWizardOpen, setIsQuickStarterWizardOpen] = useState(false);
+  const [editingQuickStarter, setEditingQuickStarter] = useState<LADQuickStarter | null>(null);
+
 
   // Calendar Integration State
   const [calendarEnabled, setCalendarEnabled] = useState(
@@ -93,6 +106,11 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
   );
   const [defaultRole, setDefaultRole] = useState<'editor' | 'viewer'>(
     activeManifest?.settings?.invitations?.default_role ?? 'editor'
+  );
+
+  // Collaborator Presence & Privacy State
+  const [presenceEnabled, setPresenceEnabled] = useState<boolean>(
+    activeManifest?.settings?.collaboration?.presence_enabled ?? true
   );
 
   // Connectivity & Diagnostics State
@@ -167,6 +185,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
       setCalendarMode(activeManifest.settings?.calendar?.mode ?? 'dedicated');
       setInviteMethod(activeManifest.settings?.invitations?.default_method ?? 'gmail');
       setDefaultRole(activeManifest.settings?.invitations?.default_role ?? 'editor');
+      setPresenceEnabled(activeManifest.settings?.collaboration?.presence_enabled ?? true);
     }
   }, [activeManifest?.space_id]);
 
@@ -190,6 +209,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     const inviteMethodChanged = inviteMethod !== (activeManifest.settings?.invitations?.default_method ?? 'gmail');
     const defaultRoleChanged = defaultRole !== (activeManifest.settings?.invitations?.default_role ?? 'editor');
     const autoArchiveChanged = Number(autoArchiveDays) !== (activeManifest.settings?.auto_archive_days ?? 7);
+    const presenceChanged = presenceEnabled !== (activeManifest.settings?.collaboration?.presence_enabled ?? true);
 
     return (
       nameChanged ||
@@ -201,7 +221,8 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
       calModeChanged ||
       inviteMethodChanged ||
       defaultRoleChanged ||
-      autoArchiveChanged
+      autoArchiveChanged ||
+      presenceChanged
     );
   }, [
     activeManifest,
@@ -215,6 +236,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     inviteMethod,
     defaultRole,
     autoArchiveDays,
+    presenceEnabled,
   ]);
 
   const { registerGuard, unregisterGuard } = useNavigationGuard();
@@ -231,6 +253,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     setCalendarMode(activeManifest.settings?.calendar?.mode ?? 'dedicated');
     setInviteMethod(activeManifest.settings?.invitations?.default_method ?? 'gmail');
     setDefaultRole(activeManifest.settings?.invitations?.default_role ?? 'editor');
+    setPresenceEnabled(activeManifest.settings?.collaboration?.presence_enabled ?? true);
   }, [activeManifest]);
 
   const auth = authService.getState();
@@ -257,6 +280,11 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           default_method: inviteMethod,
           default_role: defaultRole,
         },
+        collaboration: {
+          ...(activeManifest.settings?.collaboration || {}),
+          presence_enabled: presenceEnabled,
+          p2p_enabled: presenceEnabled,
+        },
       },
     });
     setIsSaving(false);
@@ -274,6 +302,7 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     calendarMode,
     inviteMethod,
     defaultRole,
+    presenceEnabled,
     updateSpaceIdentity,
     t,
   ]);
@@ -308,6 +337,90 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasChanges]);
+
+  const handleDeleteCardType = async (typeToDelete: LADCardTypeDefinition) => {
+    setIsDeletingCardType(true);
+    try {
+      const registry = SchemaRegistry.getInstance();
+      registry.deleteCardType(typeToDelete.id);
+      if (activeManifest) {
+        const exportedCustom = registry.exportCustomCardTypes();
+        const exportedDisabled = registry.exportDisabledCardTypeIds();
+        const existingStarters = activeManifest.settings?.quick_starters || [];
+        const updatedStarters = existingStarters.filter((qs: any) => qs.cardTypeId !== typeToDelete.id);
+        await updateSpaceIdentity(activeManifest.space_id, {
+          settings: {
+            ...(activeManifest.settings || {}),
+            custom_card_types: exportedCustom,
+            disabled_card_type_ids: exportedDisabled,
+            quick_starters: updatedStarters,
+          },
+        });
+      }
+      setCardTypeToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete card type:', err);
+    } finally {
+      setIsDeletingCardType(false);
+    }
+  };
+
+  const handleRestoreDefaultCardTypes = async () => {
+    const registry = SchemaRegistry.getInstance();
+    registry.loadDisabledCardTypeIds([]);
+    if (activeManifest) {
+      await updateSpaceIdentity(activeManifest.space_id, {
+        settings: {
+          ...(activeManifest.settings || {}),
+          disabled_card_type_ids: [],
+        },
+      });
+    }
+  };
+
+  const currentQuickStarters: LADQuickStarter[] =
+    activeManifest?.settings?.quick_starters && activeManifest.settings.quick_starters.length > 0
+      ? activeManifest.settings.quick_starters
+      : getDefaultQuickStarters(SchemaRegistry.getInstance().getAllCardTypes());
+
+  const handleSaveQuickStarter = async (starter: LADQuickStarter) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters
+      ? [...activeManifest.settings.quick_starters]
+      : [...currentQuickStarters];
+    const idx = existing.findIndex((s) => s.id === starter.id);
+    const updated = idx >= 0 ? existing.map((s, i) => (i === idx ? starter : s)) : [...existing, starter];
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const handleDeleteQuickStarter = async (starterId: string) => {
+    if (!activeManifest) return;
+    const existing = activeManifest.settings?.quick_starters || [...currentQuickStarters];
+    const updated = existing.filter((s) => s.id !== starterId);
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: updated,
+      },
+    });
+  };
+
+  const handleResetQuickStarters = async () => {
+    if (!activeManifest) return;
+    const defaults = getDefaultQuickStarters(SchemaRegistry.getInstance().getAllCardTypes());
+    await updateSpaceIdentity(activeManifest.space_id, {
+      settings: {
+        ...(activeManifest.settings || {}),
+        quick_starters: defaults,
+      },
+    });
+  };
+
 
   const handleExportIcs = () => {
     const icsString = generateIcsContent(
@@ -784,24 +897,157 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                     <span className="text-[10px] text-slate-400 font-mono">
                       {ct.category}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCardType(ct);
-                        setIsCardTypeEditorOpen(true);
-                      }}
-                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-                      data-testid={`edit-card-type-${ct.id}`}
-                    >
-                      <Pencil className="w-3 h-3" />
-                      {ct.isSpaceCustomized ? 'Edit Space Copy' : ct.isDefault ? 'Customize Copy' : 'Edit Schema'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCardType(ct);
+                          setIsCardTypeEditorOpen(true);
+                        }}
+                        className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        data-testid={`edit-card-type-${ct.id}`}
+                      >
+                        <Pencil className="w-3 h-3" />
+                        {ct.isSpaceCustomized ? 'Edit Space Copy' : ct.isDefault ? 'Customize Copy' : 'Edit Schema'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCardTypeToDelete(ct)}
+                        className="text-[11px] font-semibold text-rose-500 hover:text-rose-700 hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                        data-testid={`delete-card-type-${ct.id}`}
+                        title={`Delete card type "${ct.name}"`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
           </div>
+
+          {SchemaRegistry.getInstance().exportDisabledCardTypeIds().length > 0 && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                {SchemaRegistry.getInstance().exportDisabledCardTypeIds().length} default card type(s) removed from this space.
+              </span>
+              <button
+                type="button"
+                onClick={handleRestoreDefaultCardTypes}
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+                data-testid="restore-default-card-types-btn"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Restore All Defaults</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 2b. Quick Starters & Fast Capture Section */}
+      <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-4" data-testid="quick-starters-settings-section">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <span>Quick Starters & Fast Capture</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Customize fast-capture template chips displayed in the Smart Capture bar and quick modal for any card type.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetQuickStarters}
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              data-testid="reset-quick-starters-btn"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Defaults</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingQuickStarter(null);
+                setIsQuickStarterWizardOpen(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer"
+              data-testid="create-quick-starter-btn"
+            >
+              <Plus className="w-3 h-3" />
+              <span>New Quick Starter (Wizard)</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {currentQuickStarters.map((qs) => (
+            <div
+              key={qs.id}
+              className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-2 flex flex-col justify-between"
+              data-testid={`quick-starter-card-${qs.id}`}
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {qs.label}
+                    </span>
+                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                      {qs.domain}
+                    </span>
+                  </div>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                    qs.color === 'emerald' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                    qs.color === 'rose' ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' :
+                    qs.color === 'amber' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
+                    qs.color === 'blue' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' :
+                    qs.color === 'purple' ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300' :
+                    qs.color === 'indigo' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' :
+                    'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}>
+                    {qs.color || 'indigo'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-200/50 dark:border-slate-800/80 line-clamp-2">
+                  {qs.templateText}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
+                  Card: {qs.cardTypeId}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingQuickStarter(qs);
+                      setIsQuickStarterWizardOpen(true);
+                    }}
+                    className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    data-testid={`edit-quick-starter-${qs.id}`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteQuickStarter(qs.id)}
+                    className="text-[11px] font-semibold text-rose-500 hover:text-rose-700 hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                    data-testid={`delete-quick-starter-${qs.id}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
 
       {/* 3. Google Calendar Integration */}
       <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-4">
@@ -1015,6 +1261,40 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
                 <span>{copiedLink ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Collaborator Presence & Privacy Toggle */}
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-start justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Radio className={`w-4 h-4 ${presenceEnabled ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  {t('spaceSettings.presenceTitle') || 'Live Collaborator Presence & Peer Activity'}
+                </label>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  presenceEnabled 
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' 
+                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                }`}>
+                  {presenceEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xl">
+                {t('spaceSettings.presenceDesc') || 'When enabled, collaborators currently viewing this space see each other in real time via serverless P2P / browser channels. Disabling this enforces complete stealth and privacy for all space members.'}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+              <input
+                type="checkbox"
+                checked={presenceEnabled}
+                onChange={(e) => setPresenceEnabled(e.target.checked)}
+                className="sr-only peer"
+                data-testid="presence-toggle"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
           </div>
         </div>
       </div>
@@ -1263,6 +1543,60 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
         </div>
       )}
 
+      {/* Delete Card Type Confirmation Modal */}
+      {cardTypeToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Delete Card Type
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                  {cardTypeToDelete.name} ({cardTypeToDelete.id})
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {cardTypeToDelete.isDefault
+                ? `Remove default card type "${cardTypeToDelete.name}" from this space? Existing cards will remain accessible, but new cards of this type cannot be created until restored.`
+                : `Are you sure you want to permanently delete "${cardTypeToDelete.name}"? Existing cards of this type will lose custom field definitions.`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCardTypeToDelete(null)}
+                disabled={isDeletingCardType}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingCardType}
+                onClick={() => handleDeleteCardType(cardTypeToDelete)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                data-testid="confirm-delete-card-type-btn"
+              >
+                {isDeletingCardType ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Card Type</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Card Type Schema Editor Modal */}
       <CardTypeEditorModal
         isOpen={isCardTypeEditorOpen}
@@ -1271,6 +1605,18 @@ export const SpaceSettingsView: React.FC<SpaceSettingsViewProps> = ({ onSwitchTo
           setEditingCardType(null);
         }}
         cardType={editingCardType}
+      />
+
+      {/* Quick Starter Wizard Modal */}
+      <QuickStarterWizardModal
+        isOpen={isQuickStarterWizardOpen}
+        onClose={() => {
+          setIsQuickStarterWizardOpen(false);
+          setEditingQuickStarter(null);
+        }}
+        starter={editingQuickStarter}
+        onSave={handleSaveQuickStarter}
+        onDelete={handleDeleteQuickStarter}
       />
 
       {/* Floating Save Action Button when scrolled down past primary save button */}

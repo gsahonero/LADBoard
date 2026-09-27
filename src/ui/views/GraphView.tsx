@@ -55,8 +55,8 @@ export const GraphView: React.FC = () => {
 
     // Draw Edges
     edges.forEach((edge) => {
-      const p1 = positions.get(edge.source);
-      const p2 = positions.get(edge.target);
+      const p1 = positions.get(edge.source) || positions.get(`node_${edge.source}`) || positions.get(edge.source.replace(/^node_/, ''));
+      const p2 = positions.get(edge.target) || positions.get(`node_${edge.target}`) || positions.get(edge.target.replace(/^node_/, ''));
       if (!p1 || !p2) return;
 
       const isSelected = selectedEdge?.edge_id === edge.edge_id;

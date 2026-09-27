@@ -31,6 +31,7 @@ import {
   ChevronDown,
   History,
   ExternalLink,
+  Link2,
 } from 'lucide-react';
 
 export const renderTextWithShortUrls = (text: string | null | undefined): React.ReactNode => {
@@ -119,11 +120,36 @@ export const CARD_COLOR_PRESETS: Record<string, { border: string; bg: string; do
 };
 
 export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
-  const { updateObject, deleteObject, nodes, userRegistry, activeManifest } = useLAD();
+  const { updateObject, deleteObject, nodes, edges, objects, userRegistry, activeManifest } = useLAD();
   const { t } = useI18n();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isOnItsWayOpen, setIsOnItsWayOpen] = useState(false);
+
+  const linkedItems = useMemo(() => {
+    if (!edges || edges.length === 0) return [];
+    const cardNodeId = `node_${obj.object_id}`;
+    return edges
+      .filter(
+        (e) =>
+          e.source === cardNodeId ||
+          e.target === cardNodeId ||
+          e.source === obj.object_id ||
+          e.target === obj.object_id
+      )
+      .map((edge) => {
+        const isOutbound = edge.source === cardNodeId || edge.source === obj.object_id;
+        const otherId = isOutbound ? edge.target : edge.source;
+        const targetObjId = otherId.replace(/^node_/, '');
+        const otherObj = objects?.find((o) => o.object_id === targetObjId);
+        const otherNode = nodes?.find((n) => n.node_id === otherId || n.ref_id === targetObjId);
+        return {
+          edgeId: edge.edge_id,
+          relationType: edge.type,
+          title: otherObj?.title || otherNode?.label || targetObjId,
+        };
+      });
+  }, [edges, obj.object_id, objects, nodes]);
 
   const isCompleted = obj.status === 'completed';
   const isArchived = obj.status === 'archived';
@@ -1222,6 +1248,25 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   className="text-[9px] font-medium text-slate-400 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.2 rounded"
                 >
                   #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Bidirectional Linked Items Pills */}
+          {linkedItems.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5" data-testid={`card-links-${obj.object_id}`}>
+              {linkedItems.map((link) => (
+                <span
+                  key={link.edgeId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 shadow-2xs"
+                  title={`${link.relationType.replace(/_/g, ' ')}: ${link.title}`}
+                >
+                  <Link2 className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                  <span className="text-[9px] uppercase font-bold text-indigo-500/80">
+                    {link.relationType === 'relates_to' ? 'rel' : link.relationType.replace(/_/g, ' ')}
+                  </span>
+                  <span className="truncate max-w-[120px]">{link.title}</span>
                 </span>
               ))}
             </div>

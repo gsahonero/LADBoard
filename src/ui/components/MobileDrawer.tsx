@@ -16,6 +16,7 @@ import {
   Sparkles,
   RefreshCw,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react';
 
 interface MobileDrawerProps {
@@ -25,6 +26,7 @@ interface MobileDrawerProps {
   onOpenCreateSpace?: () => void;
   onOpenSettings: () => void;
   onOpenCapture: () => void;
+  onOpenGuidance?: () => void;
 }
 
 export const MobileDrawer: React.FC<MobileDrawerProps> = ({
@@ -34,6 +36,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onOpenCreateSpace,
   onOpenSettings,
   onOpenCapture,
+  onOpenGuidance,
 }) => {
   const {
     activeManifest,
@@ -265,6 +268,24 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
                 </button>
+
+                {/* Guide & Help */}
+                {onOpenGuidance && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenGuidance();
+                    }}
+                    className="w-full p-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between transition-colors cursor-pointer"
+                    data-testid="mobile-open-guidance-btn"
+                  >
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      <HelpCircle className="w-4 h-4 text-indigo-500" />
+                      <span>LAD Guide & Help</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                )}
 
                 {/* Quick Capture Button */}
                 <motion.button

@@ -6,38 +6,39 @@ import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADContext } from '../ui/context/LADContext';
 import { LADSpaceManifest, LADUserRegistry } from '../core/standard/types';
 
-describe('SpaceSettingsView Persistent Save & Reminder Bar', () => {
-  const mockManifest: LADSpaceManifest = {
-    lad_standard: '0.1.0',
-    schema_version: '0.1.0',
-    space_id: 'spc_test123',
-    space_name: 'Work Projects',
-    created_by: 'usr_me',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    icon: 'folder',
-    color: 'blue',
-    description: 'All work related topics',
-    categories: ['work', 'finances'],
-    settings: {
-      calendar: { enabled: false, mode: 'dedicated', sync_due_dates: true, auto_sync: true },
-      invitations: { default_method: 'gmail', default_role: 'editor' },
-    },
-  };
+const mockManifest: LADSpaceManifest = {
+  lad_standard: '0.1.0',
+  schema_version: '0.1.0',
+  space_id: 'spc_test123',
+  space_name: 'Work Projects',
+  created_by: 'usr_me',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  icon: 'folder',
+  color: 'blue',
+  description: 'All work related topics',
+  categories: ['work', 'finances'],
+  settings: {
+    calendar: { enabled: false, mode: 'dedicated', sync_due_dates: true, auto_sync: true },
+    invitations: { default_method: 'gmail', default_role: 'editor' },
+  },
+};
 
-  const createMockContext = (overrides = {}) => ({
-    activeManifest: mockManifest,
-    updateSpaceIdentity: vi.fn().mockResolvedValue(undefined),
-    objects: [],
-    authService: {
-      getState: () => ({ isAuthenticated: true, user: { email: 'me@gmail.com', provider: 'google' } }),
-    },
-    repairSpaceDriveFiles: vi.fn(),
-    deleteSpace: vi.fn(),
-    currentUserId: 'usr_me',
-    userRegistry: { spaces: [{ space_id: 'spc_test123', role: 'owner' }] },
-    ...overrides,
-  });
+const createMockContext = (overrides = {}) => ({
+  activeManifest: mockManifest,
+  updateSpaceIdentity: vi.fn().mockResolvedValue(undefined),
+  objects: [],
+  authService: {
+    getState: () => ({ isAuthenticated: true, user: { email: 'me@gmail.com', provider: 'google' } }),
+  },
+  repairSpaceDriveFiles: vi.fn(),
+  deleteSpace: vi.fn(),
+  currentUserId: 'usr_me',
+  userRegistry: { spaces: [{ space_id: 'spc_test123', role: 'owner' }] },
+  ...overrides,
+});
+
+describe('SpaceSettingsView Persistent Save & Reminder Bar', () => {
 
   it('renders persistent save bar at the top with "All Changes Saved" initially', () => {
     const mockContext = createMockContext();
@@ -252,5 +253,67 @@ describe('GlobalSettingsView Floating Save & Reminder Bar', () => {
     await waitFor(() => {
       expect(screen.getByText('Settings saved!')).toBeInTheDocument();
     });
+  });
+});
+
+describe('SpaceSettingsView Card Types Deletion and Quick Starters Wizard', () => {
+  it('allows deleting card types with confirmation dialog in SpaceSettingsView', async () => {
+    const mockContext = createMockContext();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext as any}>
+          <SpaceSettingsView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Find a delete button for a card type, e.g. shopping.groceries_buying
+    const deleteBtn = screen.getByTestId('delete-card-type-shopping.groceries_buying');
+    expect(deleteBtn).toBeInTheDocument();
+
+    fireEvent.click(deleteBtn);
+
+    // Modal dialog pops up asking for confirmation
+    expect(screen.getAllByText('Delete Card Type').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('confirm-delete-card-type-btn')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-delete-card-type-btn'));
+    });
+
+    expect(mockContext.updateSpaceIdentity).toHaveBeenCalledWith(
+      'spc_test123',
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          disabled_card_type_ids: expect.arrayContaining(['shopping.groceries_buying']),
+        }),
+      })
+    );
+  });
+
+  it('renders quick starters section and opens the wizard modal', async () => {
+    const mockContext = createMockContext();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LADContext.Provider value={mockContext as any}>
+          <SpaceSettingsView />
+        </LADContext.Provider>
+      </I18nProvider>
+    );
+
+    // Quick starters section is present
+    expect(screen.getByTestId('quick-starters-settings-section')).toBeInTheDocument();
+    expect(screen.getByText('Quick Starters & Fast Capture')).toBeInTheDocument();
+
+    const wizardBtn = screen.getByTestId('create-quick-starter-btn');
+    expect(wizardBtn).toBeInTheDocument();
+
+    fireEvent.click(wizardBtn);
+
+    // Wizard modal opens at Step 1
+    expect(screen.getByText('Quick Starter Wizard')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 4: Target Card Type')).toBeInTheDocument();
   });
 });

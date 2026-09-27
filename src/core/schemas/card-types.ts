@@ -107,3 +107,15 @@ export interface LADCategoryDefinition {
   keywords: string[]; // Seed keywords for category detection
   inferredKeywords?: string[]; // Learned or space-configured synonyms
 }
+
+export interface LADQuickStarter {
+  id: string;
+  cardTypeId: string; // references LADCardTypeDefinition.id
+  label: string; // Display label in chips
+  templateText: string; // Prompt text inserted into capture bar
+  domain: string; // Category / domain id (e.g. 'health', 'finances')
+  icon?: string; // ModernIcon / Lucide name
+  color?: string; // Styling color theme ('rose', 'emerald', 'amber', 'indigo', etc.)
+  description?: string;
+}
+
