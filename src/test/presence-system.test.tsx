@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { PresenceManager } from '../core/presence/presence-manager';
 import { PresenceAvatars } from '../ui/components/PresenceAvatars';

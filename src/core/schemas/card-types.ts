@@ -67,6 +67,14 @@ export interface LADCardTitleConfig {
   template?: string; // If mode is 'template' (e.g. "{bank} Balance", "{specialty} Appointment")
 }
 
+export interface LADCardVisualizationConfig {
+  showCheckbox?: boolean; // Whether the card displays a completion checkbox (defaults to true for tasks/notes, false for finances/metrics)
+  primaryFieldKey?: string; // Prominent hero field (e.g. 'balance' or key metric)
+  visibleFieldKeys?: string[]; // Specific fields to display in card body on board. If omitted or empty, all defined fields with values are shown.
+  showDescription?: boolean; // Whether obj.description / notes is displayed on the board card (defaults to true unless storeNotes is false)
+  badgeFieldKey?: string; // Optional field to display as header badge (e.g. 'account_type', 'specialty')
+}
+
 export interface LADCardTypeDefinition {
   id: string; // e.g. 'finances.account_balance', 'shopping.groceries_buying'
   category: string; // 'finances', 'shopping', 'health', 'home', 'documents', 'projects', 'general'
@@ -82,6 +90,7 @@ export interface LADCardTypeDefinition {
   noNotesStored?: boolean; // Optional alias: when true, no notes/raw description is stored for cards of this type
   fields: LADFieldDefinition[];
   titleConfig?: LADCardTitleConfig; // Configurable title behavior
+  visualization?: LADCardVisualizationConfig; // Configurable card visualization on board
   nlp?: LADCardNLPConfig;
   lifecycle?: LADCardLifecycleConfig;
 }

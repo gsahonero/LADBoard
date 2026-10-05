@@ -126,6 +126,13 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
       mode: 'template',
       template: '{bank} Balance',
     },
+    visualization: {
+      showCheckbox: false,
+      primaryFieldKey: 'balance',
+      visibleFieldKeys: ['bank', 'account_type', 'balance', 'comments'],
+      showDescription: true,
+      badgeFieldKey: 'account_type',
+    },
     lifecycle: {
       autoArchiveEnabled: true,
       autoArchiveDays: 7,
@@ -182,6 +189,12 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     },
     titleConfig: {
       mode: 'input_text',
+    },
+    visualization: {
+      showCheckbox: true,
+      primaryFieldKey: 'estimated_budget',
+      visibleFieldKeys: ['checklist', 'estimated_budget', 'due_date', 'comments'],
+      showDescription: true,
     },
     lifecycle: {
       autoArchiveEnabled: true,
@@ -272,6 +285,12 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
       mode: 'template',
       template: '{specialty} Appointment',
     },
+    visualization: {
+      showCheckbox: false,
+      visibleFieldKeys: ['specialty', 'patient', 'date', 'outcome', 'needs_followup', 'followup_date', 'followup_reason'],
+      showDescription: true,
+      badgeFieldKey: 'specialty',
+    },
     lifecycle: {
       hasFollowup: true,
       onItsWayActions: [
@@ -318,6 +337,11 @@ export const DEFAULT_CARD_TYPES: LADCardTypeDefinition[] = [
     },
     titleConfig: {
       mode: 'input_text',
+    },
+    visualization: {
+      showCheckbox: true,
+      visibleFieldKeys: ['title', 'comments', 'due_date'],
+      showDescription: true,
     },
     lifecycle: {
       autoArchiveEnabled: false,

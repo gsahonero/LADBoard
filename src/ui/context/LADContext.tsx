@@ -983,11 +983,14 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ...(structure.suggestedAttributes || {}),
         ...(structure.fieldValues || {}),
       };
-      if (structure.cardTypeId) {
-        mergedAttributes.card_type = structure.cardTypeId;
+      const cardTypeId =
+        structure.cardTypeId ||
+        structure.suggestedAttributes?.card_type ||
+        (structure.domain === 'finances' || mergedAttributes.balance !== undefined ? 'finances.account_balance' : undefined);
+      if (cardTypeId) {
+        mergedAttributes.card_type = cardTypeId;
       }
 
-      const cardTypeId = structure.cardTypeId || structure.suggestedAttributes?.card_type;
       const cardTypeDef = cardTypeId
         ? SchemaRegistry.getInstance().getCardType(cardTypeId)
         : undefined;

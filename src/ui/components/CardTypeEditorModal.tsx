@@ -11,6 +11,7 @@ import {
   LADFieldType,
   LADCardTitleMode,
   LADCardTitleConfig,
+  LADCardVisualizationConfig,
   isNotesStorageDisabled,
 } from '../../core/schemas/card-types';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
@@ -65,6 +66,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
   const [titleMode, setTitleMode] = useState<LADCardTitleMode>('input_text');
   const [fixedTitle, setFixedTitle] = useState('');
   const [titleTemplate, setTitleTemplate] = useState('');
+  const [showCheckbox, setShowCheckbox] = useState<boolean>(true);
+  const [primaryFieldKey, setPrimaryFieldKey] = useState<string>('');
+  const [visibleFieldKeys, setVisibleFieldKeys] = useState<string[]>([]);
+  const [showDescription, setShowDescription] = useState<boolean>(true);
+  const [badgeFieldKey, setBadgeFieldKey] = useState<string>('');
   const [fields, setFields] = useState<LADFieldDefinition[]>([]);
   const [optionsRawMap, setOptionsRawMap] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -86,12 +92,18 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setTitleMode(cardType.titleConfig?.mode || 'input_text');
       setFixedTitle(cardType.titleConfig?.fixedTitle || '');
       setTitleTemplate(cardType.titleConfig?.template || '');
+      const vis = cardType.visualization;
+      setShowCheckbox(vis?.showCheckbox ?? (cardType.category !== 'finances'));
+      setPrimaryFieldKey(vis?.primaryFieldKey || (cardType.category === 'finances' ? 'balance' : ''));
+      setShowDescription(vis?.showDescription ?? true);
+      setBadgeFieldKey(vis?.badgeFieldKey || '');
       const initialFields = cardType.fields.map((f) => ({
         ...f,
         quickEdit: f.quickEdit ?? false,
         options: f.options ? [...f.options] : undefined,
       }));
       setFields(initialFields);
+      setVisibleFieldKeys(vis?.visibleFieldKeys ? [...vis.visibleFieldKeys] : initialFields.map((f) => f.key));
       const rawMap: Record<number, string> = {};
       initialFields.forEach((f, idx) => {
         if (f.type === 'select' && f.options) {
@@ -112,6 +124,11 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
       setTitleMode('input_text');
       setFixedTitle('');
       setTitleTemplate('');
+      setShowCheckbox(defaultCategory !== 'finances');
+      setPrimaryFieldKey(defaultCategory === 'finances' ? 'balance' : '');
+      setVisibleFieldKeys(['title', 'comments']);
+      setShowDescription(true);
+      setBadgeFieldKey('');
       setFields([
         { key: 'title', label: 'Title', type: 'text', required: true },
         { key: 'comments', label: 'Comments / Notes', type: 'text', required: false },
@@ -134,21 +151,29 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
 
   const handleAddField = () => {
     const newIdx = fields.length + 1;
+    const newKey = `field_${newIdx}`;
     setFields([
       ...fields,
       {
-        key: `field_${newIdx}`,
+        key: newKey,
         label: `Field ${newIdx}`,
         type: 'text',
         required: false,
         quickEdit: false,
       },
     ]);
+    setVisibleFieldKeys((prev) => [...prev, newKey]);
   };
 
   const handleRemoveField = (index: number) => {
     if (fields.length <= 1) return;
+    const removedKey = fields[index]?.key;
     setFields(fields.filter((_, i) => i !== index));
+    if (removedKey) {
+      setVisibleFieldKeys((prev) => prev.filter((k) => k !== removedKey));
+      if (primaryFieldKey === removedKey) setPrimaryFieldKey('');
+      if (badgeFieldKey === removedKey) setBadgeFieldKey('');
+    }
     setOptionsRawMap((prev) => {
       const next: Record<number, string> = {};
       Object.entries(prev).forEach(([k, v]) => {
@@ -276,6 +301,14 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         ...(titleMode === 'template' ? { template: titleTemplate.trim() } : {}),
       };
 
+      const visualization: LADCardVisualizationConfig = {
+        showCheckbox,
+        showDescription,
+        ...(primaryFieldKey ? { primaryFieldKey } : {}),
+        ...(badgeFieldKey ? { badgeFieldKey } : {}),
+        visibleFieldKeys: visibleFieldKeys.length > 0 ? visibleFieldKeys : fields.map((f) => f.key),
+      };
+
       const definition: LADCardTypeDefinition = {
         id,
         category,
@@ -286,6 +319,7 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
         overridesDefaultId: isSpaceCustomizing && cardType ? cardType.id : undefined,
         fields,
         titleConfig,
+        visualization,
         nlp: {
           keywords: keywords.length > 0 ? keywords : [name.toLowerCase()],
         },
@@ -589,6 +623,153 @@ export const CardTypeEditorModal: React.FC<CardTypeEditorModalProps> = ({
                         &#123;{f.key}&#125;
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Board Card Visualization Configuration */}
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800" data-testid="card-visualization-section">
+              <div>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider block">
+                  Board Card Visualization
+                </span>
+                <span className="text-[11px] text-slate-400 block">
+                  Configure what is explicitly displayed on the card in the board visualization.
+                </span>
+              </div>
+
+              {/* Show Completion Checkbox Toggle */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCheckbox}
+                    onChange={(e) => setShowCheckbox(e.target.checked)}
+                    className="w-4 h-4 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                    data-testid="visualization-show-checkbox-toggle"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Show Task Completion Checkbox
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight">
+                      When checked, shows a checkbox on the board card to mark it completed. Uncheck for informational items, continuous states, or financial metrics.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Show Notes / Description Toggle */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showDescription}
+                    onChange={(e) => setShowDescription(e.target.checked)}
+                    className="w-4 h-4 rounded text-lad-600 focus:ring-lad-500 cursor-pointer"
+                    data-testid="visualization-show-description-toggle"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Show Notes / Description on Card
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight">
+                      When checked, notes and captured description text are displayed directly on the board card.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Primary Highlight Field & Badge Field */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Primary Highlight Field (Hero)
+                  </label>
+                  <select
+                    value={primaryFieldKey}
+                    onChange={(e) => setPrimaryFieldKey(e.target.value)}
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium"
+                    data-testid="visualization-primary-field-select"
+                  >
+                    <option value="">None (Standard layout)</option>
+                    {fields.map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label} ({f.key})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Displays prominently in large font with instant quick-editing.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Header Badge Field
+                  </label>
+                  <select
+                    value={badgeFieldKey}
+                    onChange={(e) => setBadgeFieldKey(e.target.value)}
+                    className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium"
+                    data-testid="visualization-badge-field-select"
+                  >
+                    <option value="">None</option>
+                    {fields.map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label} ({f.key})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Displays as a badge in the card header.
+                  </span>
+                </div>
+              </div>
+
+              {/* Visible Fields Checklist */}
+              {fields.length > 0 && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2" data-testid="visualization-visible-fields-section">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Visible Fields on Board Card
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleFieldKeys(fields.map((f) => f.key))}
+                      className="text-[10px] font-semibold text-lad-600 dark:text-lad-400 hover:underline cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                    {fields.map((f) => {
+                      const isVisible = visibleFieldKeys.includes(f.key);
+                      return (
+                        <label
+                          key={f.key}
+                          className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer text-xs"
+                          data-testid={`visualization-field-checkbox-${f.key}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isVisible}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setVisibleFieldKeys((prev) => [...prev, f.key]);
+                              } else {
+                                setVisibleFieldKeys((prev) => prev.filter((k) => k !== f.key));
+                              }
+                            }}
+                            className="w-3.5 h-3.5 rounded text-lad-600 focus:ring-lad-500"
+                          />
+                          <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
+                            {f.label}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               )}

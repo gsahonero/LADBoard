@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { CardEditModal } from '../ui/components/CardEditModal';
 import { ObjectCard } from '../ui/components/ObjectCard';
 import { LADContext } from '../ui/context/LADContext';
@@ -15,11 +14,12 @@ describe('Deep Relational Entity Weaving (Card-to-Card Linking & Graph Pills)', 
     title: 'Research Quantum Computing',
     status: 'active',
     priority: 'high',
+    tags: [],
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     created_by: 'usr_alice',
     attributes: {},
-    schema_version: 1,
-    vector_clock: { usr_alice: 1 },
+    version: 1,
   };
 
   const mockCard2: LADObject = {
@@ -29,11 +29,12 @@ describe('Deep Relational Entity Weaving (Card-to-Card Linking & Graph Pills)', 
     title: 'Implement Grover Algorithm',
     status: 'active',
     priority: 'medium',
+    tags: [],
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     created_by: 'usr_alice',
     attributes: {},
-    schema_version: 1,
-    vector_clock: { usr_alice: 1 },
+    version: 1,
   };
 
   const mockNodes: LADGraphNode[] = [

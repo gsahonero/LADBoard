@@ -147,11 +147,14 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
   const handleSave = async () => {
     if (!title.trim() && !inputText.trim()) return;
 
+    const effectiveCardTypeId =
+      inferred?.cardTypeId || (domain === 'finances' ? 'finances.account_balance' : undefined);
+
     const finalStructure: InferredStructure = {
       rawText: inputText,
       title: title.trim() || inputText.trim(),
       domain,
-      cardTypeId: inferred?.cardTypeId,
+      cardTypeId: effectiveCardTypeId,
       priority,
       dueDate: dueDate || undefined,
       assignedTo: assignedTo || undefined,

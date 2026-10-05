@@ -155,7 +155,13 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const isArchived = obj.status === 'archived';
   const cardType = obj.attributes?.card_type;
   const registeredCardTypeDef = cardType ? SchemaRegistry.getInstance().getCardType(cardType) : undefined;
-  const noNotes = isNotesStorageDisabled(registeredCardTypeDef);
+  const effectiveCardTypeDef = registeredCardTypeDef || (
+    obj.domain === 'finances' || obj.attributes?.balance !== undefined
+      ? SchemaRegistry.getInstance().getCardType('finances.account_balance')
+      : undefined
+  );
+  const visConfig = effectiveCardTypeDef?.visualization;
+  const noNotes = isNotesStorageDisabled(effectiveCardTypeDef);
   const checklist: Array<{ id: string; text: string; completed: boolean }> =
     obj.attributes?.checklist || [];
   const followup = obj.attributes?.followup;
@@ -166,18 +172,61 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
   const [quickEditingField, setQuickEditingField] = useState<string | null>(null);
   const [quickEditValue, setQuickEditValue] = useState<any>('');
 
+  // Visualization configurations
+  const isTaskOrActionable = useMemo(() => {
+    if (visConfig?.showCheckbox !== undefined) {
+      return visConfig.showCheckbox;
+    }
+    // Heuristic: Finances, cards with balance, or medical visits have no completion checkbox by default
+    if (
+      obj.domain === 'finances' ||
+      obj.attributes?.balance !== undefined ||
+      cardType === 'finances.account_balance' ||
+      cardType === 'health.medical_appointment'
+    ) {
+      return false;
+    }
+    return true;
+  }, [visConfig?.showCheckbox, obj.domain, obj.attributes?.balance, cardType]);
+
+  const shouldShowDescription = useMemo(() => {
+    if (visConfig?.showDescription === false || noNotes) {
+      return false;
+    }
+    return Boolean(obj.description);
+  }, [visConfig?.showDescription, noNotes, obj.description]);
+
+  const primaryFieldKey = visConfig?.primaryFieldKey || (
+    effectiveCardTypeDef?.id === 'finances.account_balance' || obj.attributes?.balance !== undefined
+      ? 'balance'
+      : undefined
+  );
+
   const balanceFieldDef: LADFieldDefinition = useMemo(() => {
+    if (primaryFieldKey && effectiveCardTypeDef) {
+      const found = effectiveCardTypeDef.fields.find((f) => f.key === primaryFieldKey);
+      if (found) return found;
+    }
     return (
-      registeredCardTypeDef?.fields.find((f) => f.key === 'balance') || {
+      effectiveCardTypeDef?.fields.find((f) => f.key === 'balance') || {
         key: 'balance',
         label: 'Balance',
         type: 'currency',
         quickEdit: true,
       }
     );
-  }, [registeredCardTypeDef]);
+  }, [effectiveCardTypeDef, primaryFieldKey]);
 
   const isBalanceQuickEditable = balanceFieldDef.quickEdit !== false;
+
+  const visibleFields = useMemo(() => {
+    if (!effectiveCardTypeDef) return [];
+    const all = effectiveCardTypeDef.fields;
+    if (visConfig?.visibleFieldKeys && visConfig.visibleFieldKeys.length > 0) {
+      return all.filter((f) => visConfig.visibleFieldKeys!.includes(f.key));
+    }
+    return all;
+  }, [effectiveCardTypeDef, visConfig?.visibleFieldKeys]);
 
   const startQuickEdit = (e: React.MouseEvent, fieldKey: string, initialVal: any) => {
     e.stopPropagation();
@@ -369,15 +418,15 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
       if (resolved) return resolved;
     }
 
-    if (registeredCardTypeDef?.titleConfig) {
-      const { mode, fixedTitle, template } = registeredCardTypeDef.titleConfig;
+    if (effectiveCardTypeDef?.titleConfig) {
+      const { mode, fixedTitle, template } = effectiveCardTypeDef.titleConfig;
       const pattern = mode === 'fixed' ? fixedTitle : mode === 'template' ? template : undefined;
       if (pattern && /[\{\[\%\$]/.test(pattern)) {
         if (!obj.title || obj.title === pattern || hasWildcards) {
           const resolved = CaptureParser.resolveTitleWildcards(
             pattern,
             combinedData,
-            obj.title || registeredCardTypeDef.name
+            obj.title || effectiveCardTypeDef.name
           );
           if (resolved) return resolved;
         }
@@ -385,7 +434,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
     }
 
     return obj.title;
-  }, [obj.title, obj.attributes, obj.due_date, obj.assigned_to, obj.priority, registeredCardTypeDef]);
+  }, [obj.title, obj.attributes, obj.due_date, obj.assigned_to, obj.priority, effectiveCardTypeDef]);
 
   const handleToggleCompleted = async () => {
     await updateObject(
@@ -592,14 +641,18 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                 </span>
               )}
 
-              {registeredCardTypeDef &&
+              {visConfig?.badgeFieldKey && obj.attributes?.[visConfig.badgeFieldKey] ? (
+                <span className="text-[10px] font-semibold px-2 py-0.5 bg-lad-50 dark:bg-lad-950/40 text-lad-700 dark:text-lad-300 rounded-full border border-lad-200 dark:border-lad-800">
+                  {String(obj.attributes[visConfig.badgeFieldKey])}
+                </span>
+              ) : effectiveCardTypeDef &&
                 !['finances.account_balance', 'shopping.groceries_buying', 'health.medical_appointment'].includes(
-                  cardType || ''
-                ) && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-lad-50 dark:bg-lad-950/40 text-lad-700 dark:text-lad-300 rounded-full border border-lad-200 dark:border-lad-800">
-                    {registeredCardTypeDef.name}
-                  </span>
-                )}
+                  effectiveCardTypeDef.id || ''
+                ) ? (
+                <span className="text-[10px] font-semibold px-2 py-0.5 bg-lad-50 dark:bg-lad-950/40 text-lad-700 dark:text-lad-300 rounded-full border border-lad-200 dark:border-lad-800">
+                  {effectiveCardTypeDef.name}
+                </span>
+              ) : null}
 
               {isArchived && (
                 <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full">
@@ -865,6 +918,12 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                       Budget: ${Number(obj.attributes.estimated_budget).toLocaleString()}
                     </div>
                   )}
+
+                  {shouldShowDescription && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2" data-testid="card-description">
+                      {renderTextWithShortUrls(obj.description)}
+                    </p>
+                  )}
                 </div>
               ) : cardType === 'health.medical_appointment' ? (
                 /* Specialized View: Medical Appointment with Follow-up Action */
@@ -872,7 +931,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                        {obj.title}
+                        {displayTitle}
                       </h3>
                       {obj.attributes?.patient && (
                         <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold block">
@@ -918,20 +977,125 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                       </button>
                     </div>
                   )}
+
+                  {shouldShowDescription && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2" data-testid="card-description">
+                      {renderTextWithShortUrls(obj.description)}
+                    </p>
+                  )}
                 </div>
-              ) : registeredCardTypeDef ? (
+              ) : effectiveCardTypeDef ? (
                 /* Dynamic View for Custom or Registered Card Types */
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                      {displayTitle}
-                    </h3>
+                    <div className="flex items-start gap-2 flex-1">
+                      {isTaskOrActionable && (
+                        <motion.button
+                          whileTap={{ scale: 0.8 }}
+                          onClick={handleToggleCompleted}
+                          className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
+                          data-testid={`card-checkbox-${obj.object_id}`}
+                        >
+                          {isCompleted ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </motion.button>
+                      )}
+                      <div>
+                        <h3 className={`text-xs font-bold text-slate-900 dark:text-white leading-snug transition-all ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
+                          {displayTitle}
+                        </h3>
+                        {visConfig?.badgeFieldKey && obj.attributes?.[visConfig.badgeFieldKey] && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
+                            • {String(obj.attributes[visConfig.badgeFieldKey])}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {primaryFieldKey && obj.attributes?.[primaryFieldKey] !== undefined && (
+                      <div className="text-right">
+                        {quickEditingField === primaryFieldKey ? (
+                          <div
+                            className="flex items-center gap-1.5 justify-end"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`quick-editor-container-${primaryFieldKey}`}
+                          >
+                            {balanceFieldDef.type === 'currency' && (
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 font-mono">$</span>
+                            )}
+                            <input
+                              type={balanceFieldDef.type === 'currency' || balanceFieldDef.type === 'number' ? 'number' : 'text'}
+                              step={balanceFieldDef.type === 'currency' ? 'any' : undefined}
+                              autoFocus
+                              value={quickEditValue}
+                              onChange={(e) => setQuickEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveQuickEdit(e, balanceFieldDef);
+                                if (e.key === 'Escape') cancelQuickEdit();
+                              }}
+                              className="w-28 px-2 py-0.5 text-sm font-bold rounded-lg border border-emerald-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              data-testid={`quick-editor-input-${primaryFieldKey}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => handleSaveQuickEdit(e, balanceFieldDef)}
+                              className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-md cursor-pointer transition-colors"
+                              title="Save"
+                              data-testid={`quick-editor-save-${primaryFieldKey}`}
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelQuickEdit}
+                              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md cursor-pointer transition-colors"
+                              title="Cancel"
+                              data-testid={`quick-editor-cancel-${primaryFieldKey}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="group/balance flex items-center justify-end gap-1.5">
+                            <span
+                              className={`text-lg font-extrabold ${balanceFieldDef.type === 'currency' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'} ${isBalanceQuickEditable ? 'cursor-pointer hover:underline' : ''}`}
+                              onClick={(e) => {
+                                if (isBalanceQuickEditable) {
+                                  startQuickEdit(e, primaryFieldKey, obj.attributes?.[primaryFieldKey]);
+                                }
+                              }}
+                              title={isBalanceQuickEditable ? `Click to quick edit ${balanceFieldDef.label}` : undefined}
+                              data-testid={primaryFieldKey === 'balance' ? `card-balance-display-${obj.object_id}` : `card-primary-display-${obj.object_id}`}
+                            >
+                              {balanceFieldDef.type === 'currency'
+                                ? `$${Number(obj.attributes[primaryFieldKey]).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                : String(obj.attributes[primaryFieldKey])}
+                            </span>
+                            {isBalanceQuickEditable && (
+                              <button
+                                type="button"
+                                onClick={(e) => startQuickEdit(e, primaryFieldKey, obj.attributes?.[primaryFieldKey])}
+                                className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors opacity-70 group-hover/balance:opacity-100 cursor-pointer"
+                                title={`Quick edit ${balanceFieldDef.label}`}
+                                data-testid={primaryFieldKey === 'balance' ? 'quick-edit-trigger-balance' : `quick-edit-trigger-${primaryFieldKey}`}
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Dynamic field attributes according to schema */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
-                    {registeredCardTypeDef.fields.map((field) => {
+                    {visibleFields.map((field) => {
                       if (field.key === 'title') return null;
+                      if (field.key === primaryFieldKey && obj.attributes?.[primaryFieldKey] !== undefined) return null;
                       const val = obj.attributes?.[field.key];
                       const isQuickEditable = Boolean(field.quickEdit);
                       const isCurrentlyEditing = quickEditingField === field.key;
@@ -1109,7 +1273,7 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
                     })}
                   </div>
 
-                  {obj.description && obj.description !== displayTitle && !noNotes && (
+                  {shouldShowDescription && (
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 line-clamp-2" data-testid="card-description">
                       {renderTextWithShortUrls(obj.description)}
                     </p>
@@ -1118,26 +1282,37 @@ export const ObjectCard: React.FC<{ obj: LADObject }> = ({ obj }) => {
               ) : (
                 /* Fallback View: General Card */
                 <div className="flex items-start gap-2.5">
-                  <motion.button
-                    whileTap={{ scale: 0.8 }}
-                    onClick={handleToggleCompleted}
-                    className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
-                  >
-                    {isCompleted ? (
-                      <CheckSquare className="w-4 h-4 text-emerald-500" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </motion.button>
+                  {isTaskOrActionable && (
+                    <motion.button
+                      whileTap={{ scale: 0.8 }}
+                      onClick={handleToggleCompleted}
+                      className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
+                      data-testid={`card-checkbox-${obj.object_id}`}
+                    >
+                      {isCompleted ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </motion.button>
+                  )}
                   <div className="flex-1">
                     <h3
                       className={`text-xs font-bold text-slate-900 dark:text-white leading-snug transition-all ${
                         isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''
                       }`}
                     >
+                      {obj.attributes?.balance !== undefined && (
+                        <span
+                          className="float-right text-base font-extrabold text-emerald-600 dark:text-emerald-400 ml-2"
+                          data-testid={`card-balance-display-${obj.object_id}`}
+                        >
+                          ${Number(obj.attributes.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
                       {displayTitle}
                     </h3>
-                    {obj.description && obj.description !== displayTitle && !noNotes && (
+                    {shouldShowDescription && (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2" data-testid="card-description">
                         {renderTextWithShortUrls(obj.description)}
                       </p>
