@@ -189,6 +189,27 @@ export class ActiveEngine {
   ): LADActiveAlert[] {
     const currentAlertMap = new Map<string, LADActiveAlert>();
 
+    // Preserve custom alerts (e.g. sync fallback, card assignment notifications)
+    for (const [id, alert] of this.activeAlerts.entries()) {
+      if (
+        alert.type === 'sync_fallback' ||
+        alert.type === 'card_assignment' ||
+        alert.type === 'assignment' ||
+        alert.metadata?.isCustom
+      ) {
+        if (alert.status === 'active') {
+          if (alert.target_id && alert.type !== 'sync_fallback') {
+            const targetObj = objects.find((o) => o.object_id === alert.target_id);
+            if (targetObj && targetObj.status !== 'archived') {
+              currentAlertMap.set(id, alert);
+            }
+          } else {
+            currentAlertMap.set(id, alert);
+          }
+        }
+      }
+    }
+
     for (const obj of objects) {
       // 1. Active Rules Evaluation
       let hasActiveAlert = false;

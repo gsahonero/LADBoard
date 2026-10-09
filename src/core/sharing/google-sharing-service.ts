@@ -12,6 +12,19 @@ export interface SendInviteEmailParams {
   joinUrl: string;
 }
 
+export interface SendAssignmentEmailParams {
+  toEmail: string;
+  assigneeName?: string;
+  cardTitle: string;
+  spaceName: string;
+  spaceId: string;
+  assignerName: string;
+  assignerEmail: string;
+  dueDate?: string;
+  domain?: string;
+  spaceUrl?: string;
+}
+
 export interface DriveShareResult {
   success: boolean;
   permissionId?: string;
@@ -286,6 +299,99 @@ export async function sendGmailInvitation(
       success: false,
       error: err.message || 'Failed to dispatch Gmail invitation',
     };
+  }
+}
+
+/**
+ * Dispatches an assignment notification email to a collaborator via the Gmail API
+ */
+export async function sendAssignmentNotificationEmail(
+  accessToken: string,
+  params: SendAssignmentEmailParams
+): Promise<GmailDispatchResult> {
+  try {
+    const subject = `Card Assigned: "${params.cardTitle}" on LAD Board`;
+    const greetingName = params.assigneeName || params.toEmail.split('@')[0];
+    const destinationUrl = params.spaceUrl || getShareableJoinUrl(params.spaceId);
+
+    const emailBodyLines = [
+      `From: ${params.assignerName} <${params.assignerEmail}>`,
+      `To: ${params.toEmail}`,
+      `Subject: =?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; padding: 24px; }
+    .container { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .logo { display: inline-block; background: #7c3aed; color: #ffffff; font-weight: 900; font-size: 14px; padding: 6px 12px; border-radius: 10px; margin-bottom: 20px; }
+    h1 { font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 0; }
+    p { font-size: 14px; line-height: 1.6; color: #475569; }
+    .card { background: #f8fafc; border-radius: 14px; padding: 18px; margin: 24px 0; border: 1px solid #e2e8f0; }
+    .card-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+    .card-label { color: #64748b; font-weight: 600; }
+    .card-val { color: #0f172a; font-weight: 700; }
+    .btn { display: inline-block; background: #7c3aed; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 12px; text-decoration: none; margin: 16px 0; }
+    .footer { font-size: 11px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">LAD Board</div>
+    <h1>You have been assigned to a Card</h1>
+    <p>Hi <strong>${greetingName}</strong>,</p>
+    <p><strong>${params.assignerName}</strong> has assigned you to a card in <strong>${params.spaceName}</strong>:</p>
+    
+    <div class="card">
+      <div class="card-row"><span class="card-label">Card Title:</span> <span class="card-val">${params.cardTitle}</span></div>
+      ${params.dueDate ? `<div class="card-row"><span class="card-label">Due Date:</span> <span class="card-val">${params.dueDate}</span></div>` : ''}
+      ${params.domain ? `<div class="card-row"><span class="card-label">Category:</span> <span class="card-val" style="text-transform: capitalize;">${params.domain}</span></div>` : ''}
+      <div class="card-row"><span class="card-label">Assigned By:</span> <span class="card-val">${params.assignerName} (${params.assignerEmail})</span></div>
+    </div>
+
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${destinationUrl}" class="btn" target="_blank">Open Board in LAD</a>
+    </div>
+
+    <div class="footer">
+      LAD Board • Living Active Dynamic Board • LAD Standard 1.0
+    </div>
+  </div>
+</body>
+</html>`,
+    ];
+
+    const rawMessage = emailBodyLines.join('\r\n');
+    const encoded = base64UrlEncode(rawMessage);
+
+    console.log(`[LAD:Notification] 📧 Sending assignment notification email to ${params.toEmail}...`);
+
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: encoded }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errorMsg = errData.error?.message || `Gmail API error: ${res.statusText}`;
+      console.warn(`[LAD:Notification] ⚠️ Gmail assignment notification failed for ${params.toEmail}:`, errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    const data = await res.json();
+    console.log(`[LAD:Notification] ✅ Assignment email sent to ${params.toEmail} (messageId: ${data.id})`);
+    return { success: true, messageId: data.id };
+  } catch (err: any) {
+    console.warn(`[LAD:Notification] ⚠️ Assignment email dispatch error:`, err);
+    return { success: false, error: err.message || 'Failed to dispatch assignment email' };
   }
 }
 

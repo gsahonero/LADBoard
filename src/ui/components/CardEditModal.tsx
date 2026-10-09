@@ -12,6 +12,7 @@ import { LADCardTypeDefinition, isNotesStorageDisabled } from '../../core/schema
 import { CaptureParser } from '../../core/objects/capture-parser';
 import { useLAD } from '../context/LADContext';
 import { useI18n } from '../../core/i18n/i18n-context';
+import { PersonAutocompleteInput } from './PersonAutocompleteInput';
 import {
   X,
   Check,
@@ -507,13 +508,12 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
                     Assigned To
                   </label>
                   <div className="relative">
-                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3 pointer-events-none" />
-                    <input
-                      type="text"
+                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3 pointer-events-none z-10" />
+                    <PersonAutocompleteInput
                       value={assignedTo}
-                      onChange={(e) => setAssignedTo(e.target.value)}
+                      onChange={setAssignedTo}
                       placeholder="e.g. Dad, Doctor..."
-                      className="w-full pl-8 pr-2.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
+                      dataTestId="edit-modal-assigned-to-input"
                     />
                   </div>
                 </div>
@@ -644,14 +644,15 @@ export const CardEditModal: React.FC<CardEditModalProps> = ({ isOpen, onClose, o
                           <label className="text-[10px] font-bold uppercase text-slate-400 block">
                             {field.label} {field.required && '*'}
                           </label>
-                          <input
-                            type="text"
-                            value={val}
-                            placeholder={field.placeholder || 'e.g. Me, Dad, Dr. Smith'}
-                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="w-full p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
-                            data-testid={`field-person-${field.key}`}
-                          />
+                          <div className="relative">
+                            <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3 pointer-events-none z-10" />
+                            <PersonAutocompleteInput
+                              value={val}
+                              placeholder={field.placeholder || 'e.g. Me, Dad, Dr. Smith'}
+                              onChange={(newVal) => handleFieldValueChange(field.key, newVal)}
+                              dataTestId={`field-person-${field.key}`}
+                            />
+                          </div>
                         </div>
                       );
                     }

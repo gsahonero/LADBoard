@@ -9,6 +9,7 @@ import { useI18n } from '../../core/i18n/i18n-context';
 import { CaptureParser } from '../../core/objects/capture-parser';
 import { InferredStructure } from '../../core/objects/types';
 import { LADObjectPriority } from '../../core/standard/types';
+import { PersonAutocompleteInput } from './PersonAutocompleteInput';
 import {
   X,
   Sparkles,
@@ -403,12 +404,12 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
                         <User className="w-3 h-3" />
                         {t('capture.assignedTo')}
                       </label>
-                      <input
-                        type="text"
+                      <PersonAutocompleteInput
                         value={assignedTo}
-                        onChange={(e) => setAssignedTo(e.target.value)}
+                        onChange={setAssignedTo}
                         placeholder="e.g. Dad, Alice"
-                        className="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
+                        dataTestId="capture-assigned-to-input"
+                        inputClassName="w-full text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
 

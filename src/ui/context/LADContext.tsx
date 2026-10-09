@@ -19,8 +19,11 @@ import {
   shareSpaceDriveFolder,
   revokeSpaceDrivePermission,
   sendGmailInvitation,
+  sendAssignmentNotificationEmail,
   getShareableJoinUrl,
 } from '../../core/sharing/google-sharing-service';
+import { PolicyEngine } from '../../core/graph/policy-engine';
+import { playAssignmentChime } from '../../core/utils/audio-feedback';
 import { SchemaRegistry } from '../../core/schemas/schema-registry';
 import { isNotesStorageDisabled } from '../../core/schemas/card-types';
 
@@ -104,6 +107,15 @@ export interface LADContextType {
   approveProposal: (proposalId: string) => Promise<void>;
   rejectProposal: (proposalId: string) => void;
 
+  // Assignment Notifications
+  assignmentNotification: {
+    cardId: string;
+    cardTitle: string;
+    assigneeName: string;
+    timestamp: number;
+  } | null;
+  dismissAssignmentNotification: () => void;
+
   // Sync & Conflict Resolution
   syncState: SyncState;
   triggerSync: () => Promise<void>;
@@ -144,6 +156,16 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [nodes, setNodes] = useState<LADGraphNode[]>([]);
   const [edges, setEdges] = useState<LADGraphEdge[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<LADActiveAlert[]>([]);
+  const [assignmentNotification, setAssignmentNotification] = useState<{
+    cardId: string;
+    cardTitle: string;
+    assigneeName: string;
+    timestamp: number;
+  } | null>(null);
+
+  const dismissAssignmentNotification = useCallback(() => {
+    setAssignmentNotification(null);
+  }, []);
   const [proposals, setProposals] = useState<ProposedAgentAction[]>([]);
   const [operations, setOperations] = useState<LADOperation[]>([]);
   const [syncState, setSyncState] = useState<SyncState>({
@@ -975,6 +997,190 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [activeSpace, storageManager, authService]);
 
+  const notifyCardAssignment = useCallback(
+    async (
+      card: LADObject,
+      assigneeName: string,
+      previousAssignee?: string
+    ) => {
+      if (!activeSpace || !userRegistry) return;
+      const cleanAssignee = assigneeName.trim();
+      if (!cleanAssignee) return;
+
+      try {
+        // 1. Find or create matching user node in graph
+        const userNodes = activeSpace.graphStore.getNodes().filter((n) => n.type === 'user');
+        const matchedUserNode = userNodes.find((n) => {
+          const nName =
+            n.metadata?.display_name ||
+            n.metadata?.name ||
+            n.metadata?.invited_name ||
+            (!n.label.includes('@') ? n.label : undefined);
+          const nEmail = n.metadata?.email || (n.label.includes('@') ? n.label : undefined);
+          return (
+            (nName && nName.toLowerCase() === cleanAssignee.toLowerCase()) ||
+            (nEmail && nEmail.toLowerCase() === cleanAssignee.toLowerCase()) ||
+            n.node_id === cleanAssignee ||
+            n.ref_id === cleanAssignee
+          );
+        });
+
+        const targetNode =
+          matchedUserNode ||
+          (await activeSpace.graphStore.ensureNodeForEntity(
+            `person_${cleanAssignee.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`,
+            'user',
+            cleanAssignee
+          ));
+
+        // 2. Ensure card node exists
+        const cardNode = await activeSpace.graphStore.ensureNodeForEntity(
+          card.object_id,
+          'object',
+          card.title,
+          {
+            domain: card.domain,
+            priority: card.priority,
+          }
+        );
+
+        // 3. Remove previous assigned_to edges for this card if pointing to someone else
+        const edges = activeSpace.graphStore.getEdges();
+        const oldEdges = edges.filter(
+          (e) =>
+            (e.source === cardNode.node_id || e.source === card.object_id) &&
+            e.type === 'assigned_to' &&
+            e.target !== targetNode.node_id
+        );
+        for (const oldEdge of oldEdges) {
+          await activeSpace.graphStore.removeEdge(oldEdge.edge_id);
+        }
+
+        // 4. Add/ensure directed edge for assignment with notification policy
+        const hasEdge = activeSpace.graphStore
+          .getEdges()
+          .some(
+            (e) =>
+              (e.source === cardNode.node_id || e.source === card.object_id) &&
+              e.target === targetNode.node_id &&
+              e.type === 'assigned_to'
+          );
+
+        if (!hasEdge) {
+          try {
+            await activeSpace.graphStore.addEdge({
+              edge_id: `edge_${card.object_id}_${targetNode.node_id}`,
+              source: cardNode.node_id,
+              target: targetNode.node_id,
+              type: 'assigned_to',
+              policies: {
+                notification: {
+                  assignment: true,
+                  modification: true,
+                  default: true,
+                },
+              },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          } catch {
+            // Edge may already exist
+          }
+        }
+
+        // 5. Evaluate policy recipients via PolicyEngine
+        const policyRecipients = PolicyEngine.resolveNotificationRecipients(
+          activeSpace.graphStore.getEdges(),
+          cardNode.node_id,
+          'assignment',
+          card.domain,
+          userRegistry.user_id
+        );
+
+        // 6. Register Active Alert in ActiveEngine
+        const alertId = `alert_assign_${card.object_id}`;
+        const actorName =
+          authService.getState().user?.name ||
+          userRegistry.identities?.[0]?.display_name ||
+          'Space Member';
+
+        activeSpace.activeEngine.addCustomAlert({
+          alert_id: alertId,
+          space_id: activeSpace.manifest.space_id,
+          type: 'card_assignment',
+          target_id: card.object_id,
+          title: `Card Assigned: ${card.title}`,
+          message: `${cleanAssignee} has been assigned to "${card.title}".`,
+          domain: card.domain,
+          status: 'active',
+          created_at: new Date().toISOString(),
+          metadata: {
+            assigned_to: cleanAssignee,
+            assigned_by: actorName,
+            card_id: card.object_id,
+            card_title: card.title,
+            target_node_id: targetNode.node_id,
+            target_email: targetNode.metadata?.email,
+            policy_recipients_count: policyRecipients.length,
+            isCustom: true,
+          },
+        });
+
+        // 7. Play sound chime
+        playAssignmentChime();
+
+        // 8. Surface in-app live toast notification
+        setAssignmentNotification({
+          cardId: card.object_id,
+          cardTitle: card.title,
+          assigneeName: cleanAssignee,
+          timestamp: Date.now(),
+        });
+
+        // 9. Dispatch browser notification if granted
+        if (
+          typeof window !== 'undefined' &&
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ) {
+          try {
+            new Notification(`Card Assigned: ${card.title}`, {
+              body: `${cleanAssignee} was assigned to "${card.title}"`,
+              icon: '/favicon.ico',
+            });
+          } catch {}
+        }
+
+        // 10. If target has an email and Google auth is active, dispatch Gmail notification
+        const targetEmail = targetNode.metadata?.email;
+        const auth = authService.getState();
+        if (
+          targetEmail &&
+          auth.isAuthenticated &&
+          auth.accessToken &&
+          activeSpace.manifest.settings?.connectivity?.gmail_enabled !== false
+        ) {
+          sendAssignmentNotificationEmail(auth.accessToken, {
+            toEmail: targetEmail,
+            assigneeName: cleanAssignee,
+            cardTitle: card.title,
+            spaceName: activeSpace.manifest.space_name,
+            spaceId: activeSpace.manifest.space_id,
+            assignerName: actorName,
+            assignerEmail: auth.user?.email || userRegistry.identities?.[0]?.email || '',
+            dueDate: card.due_date,
+            domain: card.domain,
+          }).catch((err) => {
+            console.warn('[LAD:Notification] Optional assignment email dispatch failed:', err);
+          });
+        }
+      } catch (err) {
+        console.warn('[LAD:Notification] Error in notifyCardAssignment:', err);
+      }
+    },
+    [activeSpace, userRegistry, authService]
+  );
+
   const createObjectFromCapture = useCallback(
     async (structure: InferredStructure): Promise<LADObject> => {
       if (!activeSpace || !userRegistry) throw new Error('No active space');
@@ -1152,28 +1358,12 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         card_type: structure.cardTypeId,
       });
 
-      // If assignedTo or patient is specified, link person node
+      // If assignedTo or patient is specified, link person node and notify
       const personName =
         structure.assignedTo ||
         (mergedAttributes.patient && mergedAttributes.patient !== 'Me' ? mergedAttributes.patient : undefined);
       if (personName) {
-        const personNode = await activeSpace.graphStore.ensureNodeForEntity(
-          `person_${personName.toLowerCase().replace(/\s+/g, '_')}`,
-          'user',
-          personName
-        );
-        try {
-          await activeSpace.graphStore.addEdge({
-            edge_id: `edge_${obj.object_id}_${personNode.node_id}`,
-            source: objNode.node_id,
-            target: personNode.node_id,
-            type: 'assigned_to',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        } catch {
-          // Edge might already exist
-        }
+        await notifyCardAssignment(obj, personName);
       }
 
       // Commit immediate operation
@@ -1188,7 +1378,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       refreshSpaceState();
       return obj;
     },
-    [activeSpace, userRegistry, refreshSpaceState]
+    [activeSpace, userRegistry, refreshSpaceState, notifyCardAssignment]
   );
 
   const updateObject = useCallback(
@@ -1260,6 +1450,21 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
       await activeSpace.objectStore.save(updated);
 
+      // If assignment changed, trigger notification & graph link
+      if (patch.assigned_to && patch.assigned_to.trim() !== (existing.assigned_to || '').trim()) {
+        await notifyCardAssignment(updated, patch.assigned_to.trim(), existing.assigned_to);
+      } else if (patch.assigned_to === undefined && existing.assigned_to) {
+        // Clear assignment edges and active assignment alert
+        activeSpace.activeEngine.dismissAlert(`alert_assign_${objectId}`);
+        const cardNodeId = `node_${objectId}`;
+        const oldEdges = activeSpace.graphStore.getEdges().filter(
+          (e) => (e.source === cardNodeId || e.source === objectId) && e.type === 'assigned_to'
+        );
+        for (const oldEdge of oldEdges) {
+          await activeSpace.graphStore.removeEdge(oldEdge.edge_id);
+        }
+      }
+
       if (immediate) {
         await activeSpace.changeAggregator.commitImmediate({
           targetId: objectId,
@@ -1283,7 +1488,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       refreshSpaceState();
     },
-    [activeSpace, userRegistry, refreshSpaceState]
+    [activeSpace, userRegistry, refreshSpaceState, notifyCardAssignment]
   );
 
   const deleteObject = useCallback(
@@ -1732,6 +1937,8 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activeAlerts,
         dismissAlert,
         snoozeAlert,
+        assignmentNotification,
+        dismissAssignmentNotification,
         proposals,
         approveProposal,
         rejectProposal,

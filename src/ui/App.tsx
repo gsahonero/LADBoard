@@ -27,6 +27,7 @@ import { CreateSpaceView } from './views/CreateSpaceView';
 import { NavigationGuardProvider, useNavigationGuard } from './context/NavigationGuardContext';
 import { UnsavedChangesModal } from './components/UnsavedChangesModal';
 import { SyncFallbackBanner } from './components/SyncFallbackBanner';
+import { AssignmentToastBanner } from './components/AssignmentToastBanner';
 import { LADLogo } from './components/LADLogo';
 
 import { motion, AnimatePresence, Variants } from 'framer-motion';
@@ -171,6 +172,9 @@ const AppContent: React.FC = () => {
 
       {/* Cloud Sync Offline Fallback Notification Banner */}
       <SyncFallbackBanner />
+
+      {/* Real-time Card Assignment Toast Notification Banner */}
+      <AssignmentToastBanner />
 
       <AnimatePresence mode="wait">
         {activeTab === 'create_space' ? (

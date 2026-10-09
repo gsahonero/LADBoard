@@ -14,6 +14,7 @@ import { LADCardTypeDefinition, isNotesStorageDisabled, LADQuickStarter } from '
 import { getDefaultQuickStarters } from '../../core/schemas/default-card-types';
 import { CardInferenceConfirmModal } from './CardInferenceConfirmModal';
 import { QuickStarterWizardModal } from './QuickStarterWizardModal';
+import { PersonAutocompleteInput } from './PersonAutocompleteInput';
 import {
   Sparkles,
   ArrowRight,
@@ -618,6 +619,23 @@ export const SmartCaptureBar: React.FC = () => {
                               <option value={val}>{val} (Custom)</option>
                             )}
                           </select>
+                        </div>
+                      );
+                    }
+
+                    if (field.type === 'person') {
+                      return (
+                        <div key={field.key}>
+                          <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                            {field.label}
+                          </label>
+                          <PersonAutocompleteInput
+                            value={val}
+                            placeholder={field.placeholder || 'e.g. Me, Dad, Dr. Smith'}
+                            onChange={(newVal) => handleFieldChange(field.key, newVal)}
+                            inputClassName="w-full text-xs p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                            dataTestId={`smart-capture-field-person-${field.key}`}
+                          />
                         </div>
                       );
                     }

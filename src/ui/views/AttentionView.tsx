@@ -15,6 +15,7 @@ import {
   Check,
   X,
   Clock,
+  UserCheck,
 } from 'lucide-react';
 
 export const AttentionView: React.FC<{ onNavigateToDomain?: (domain: string) => void }> = ({
@@ -144,9 +145,14 @@ export const AttentionView: React.FC<{ onNavigateToDomain?: (domain: string) => 
                             {alert.type === 'unresolved_shopping' && (
                               <ShoppingBag className="w-4 h-4" />
                             )}
+                            {(alert.type === 'card_assignment' || alert.type === 'assignment') && (
+                              <UserCheck className="w-4 h-4 text-purple-600" />
+                            )}
                             {alert.type !== 'stale_balance' &&
                               alert.type !== 'upcoming_event' &&
-                              alert.type !== 'unresolved_shopping' && (
+                              alert.type !== 'unresolved_shopping' &&
+                              alert.type !== 'card_assignment' &&
+                              alert.type !== 'assignment' && (
                                 <AlertTriangle className="w-4 h-4" />
                               )}
                           </div>
@@ -161,6 +167,8 @@ export const AttentionView: React.FC<{ onNavigateToDomain?: (domain: string) => 
                                 t('active.upcomingAppointment', { title: alert.title })}
                               {alert.type === 'unresolved_shopping' &&
                                 t('active.unresolvedShopping', { days: alert.days_stale || 3 })}
+                              {(alert.type === 'card_assignment' || alert.type === 'assignment') &&
+                                (alert.message || `Assigned to ${alert.metadata?.assigned_to || 'person'}`)}
                             </div>
                           </div>
                         </div>

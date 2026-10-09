@@ -17,6 +17,7 @@ import {
   X,
   AlertTriangle,
   ArrowRight,
+  UserCheck,
 } from 'lucide-react';
 
 export const AttentionCard: React.FC<{ alert: LADActiveAlert }> = ({ alert }) => {
@@ -80,6 +81,13 @@ export const AttentionCard: React.FC<{ alert: LADActiveAlert }> = ({ alert }) =>
           icon: <ShoppingBag className="w-4 h-4 text-amber-600 dark:text-amber-400" />,
           bg: 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-200/80 dark:border-amber-800/60',
           badgeText: `${alert.days_stale || 3} days waiting`,
+        };
+      case 'card_assignment':
+      case 'assignment':
+        return {
+          icon: <UserCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+          bg: 'bg-purple-50/60 dark:bg-purple-950/30 border-purple-200/80 dark:border-purple-800/60',
+          badgeText: alert.metadata?.assigned_to ? `Assigned to ${alert.metadata.assigned_to}` : 'Assigned',
         };
       default:
         return {

@@ -534,7 +534,10 @@
     "historyTitle": "Historial de la tarjeta",
     "noHistory": "Sin actualizaciones previas registradas",
     "uniqueState": "Entidad de estado único",
-    "uniqueStateDesc": "Actualiza la tarjeta existente y registra el historial en lugar de duplicarla"
+    "uniqueStateDesc": "Actualiza la tarjeta existente y registra el historial en lugar de duplicarla",
+    "assignedNotificationTitle": "Tarjeta Asignada",
+    "assignedNotificationMsg": "fue asignado a \"{title}\"",
+    "boardMembersHeader": "Personas en este tablero"
   },
   "welcomeTour": {
     "quickTour": "Hacer un recorrido rápido",

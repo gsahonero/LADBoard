@@ -534,7 +534,10 @@
     "historyTitle": "Card History",
     "noHistory": "No previous updates recorded",
     "uniqueState": "Unique State Entity",
-    "uniqueStateDesc": "Updates existing card & tracks history instead of duplicating"
+    "uniqueStateDesc": "Updates existing card & tracks history instead of duplicating",
+    "assignedNotificationTitle": "Card Assigned",
+    "assignedNotificationMsg": "was assigned to \"{title}\"",
+    "boardMembersHeader": "People in this board"
   },
   "welcomeTour": {
     "quickTour": "Take a quick tour",
