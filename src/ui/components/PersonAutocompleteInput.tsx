@@ -10,7 +10,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useOptionalLAD } from '../context/LADContext';
 import { getPeopleInBoard, BoardPerson } from '../../core/people/board-people';
-import { User, Check, Shield, Crown } from 'lucide-react';
+import { Check, Crown } from 'lucide-react';
 
 export interface PersonAutocompleteInputProps {
   value: string;

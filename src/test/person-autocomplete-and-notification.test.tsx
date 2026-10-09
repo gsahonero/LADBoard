@@ -4,8 +4,7 @@
  * 2. Assignee Notification & Attention System Alerts on Card Assignment
  */
 
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { getPeopleInBoard } from '../core/people/board-people';
 import { PersonAutocompleteInput } from '../ui/components/PersonAutocompleteInput';
@@ -17,7 +16,6 @@ import { LADContext } from '../ui/context/LADContext';
 import { I18nProvider } from '../core/i18n/i18n-context';
 import { LADGraphNode, LADObject, LADUserRegistry, LADSpaceManifest, LADActiveAlert } from '../core/standard/types';
 import { ActiveEngine } from '../core/active/active-engine';
-import { SchemaRegistry } from '../core/schemas/schema-registry';
 
 describe('Board People Resolution (getPeopleInBoard)', () => {
   const mockNodes: LADGraphNode[] = [

@@ -1001,7 +1001,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (
       card: LADObject,
       assigneeName: string,
-      previousAssignee?: string
+      _previousAssignee?: string
     ) => {
       if (!activeSpace || !userRegistry) return;
       const cleanAssignee = assigneeName.trim();
@@ -1154,13 +1154,14 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // 10. If target has an email and Google auth is active, dispatch Gmail notification
         const targetEmail = targetNode.metadata?.email;
         const auth = authService.getState();
+        const accessToken = auth.user?.accessToken;
         if (
           targetEmail &&
           auth.isAuthenticated &&
-          auth.accessToken &&
+          accessToken &&
           activeSpace.manifest.settings?.connectivity?.gmail_enabled !== false
         ) {
-          sendAssignmentNotificationEmail(auth.accessToken, {
+          sendAssignmentNotificationEmail(accessToken, {
             toEmail: targetEmail,
             assigneeName: cleanAssignee,
             cardTitle: card.title,
@@ -1352,7 +1353,7 @@ export const LADProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await activeSpace.objectStore.save(obj);
 
       // Create graph node for object
-      const objNode = await activeSpace.graphStore.ensureNodeForEntity(obj.object_id, 'object', obj.title, {
+      await activeSpace.graphStore.ensureNodeForEntity(obj.object_id, 'object', obj.title, {
         domain: obj.domain,
         priority: obj.priority,
         card_type: structure.cardTypeId,
